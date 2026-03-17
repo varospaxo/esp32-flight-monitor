@@ -53,4 +53,4 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 
 ## License
 
-MIT License
+This project is licensed under the [MIT License](LICENSE).
