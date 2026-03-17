@@ -39,6 +39,18 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - `TJpg_Decoder`
 - `ElegantOTA`
 
+## Credits & Acknowledgements
+
+### Source APIs
+- [ADSB.fi](https://adsb.fi/) – Real-time flight data.
+- [ADSB DB](https://adsbdb.com/) – Aircraft and flight route information.
+- [AirHex](https://airhex.com/) – Airline logos.
+- [Open-Meteo](https://open-meteo.com/) – Weather and Air Quality Index data.
+
+### 3D Printed Cases
+- **Case 1**: [2.8" TFT ili9341 SPI Case](https://www.thingiverse.com/thing:3461768) by AlexSk.
+- **Case 2**: [Housing Display TFT ILI9341](https://www.thingiverse.com/thing:6918515/) by rolfmobil.
+
 ## License
 
 MIT License
