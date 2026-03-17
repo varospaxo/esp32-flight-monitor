@@ -84,6 +84,10 @@ void setupServer() {
     doc["mode"]     = mode;
     doc["timezone"] = timezone;
     doc["tzOffset"] = tzOffset;
+    doc["units"]    = units;
+    doc["f_ground"] = filterGround;
+    doc["f_glider"] = filterGliders;
+    doc["btn_pin"]  = btnPin;
     xSemaphoreGive(configMutex);
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
@@ -107,14 +111,21 @@ void setupServer() {
     if (hasRange)  range_km = req->getParam("range", true)->value().toInt();
     if (hasTz)     timezone = req->getParam("timezone", true)->value();
     if (hasOffset) tzOffset = req->getParam("tzOffset", true)->value().toInt();
+    if (req->hasParam("units", true))    units = req->getParam("units", true)->value().toInt();
+    if (req->hasParam("f_ground", true)) filterGround = req->getParam("f_ground", true)->value() == "true";
+    if (req->hasParam("f_glider", true)) filterGliders = req->getParam("f_glider", true)->value() == "true";
+    if (req->hasParam("btn_pin", true))  btnPin = req->getParam("btn_pin", true)->value().toInt();
+
     configTime(tzOffset, 0, "pool.ntp.org", "time.nist.gov");
     bool ok = saveConfig();
     float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset;
+    int r_units = units; bool r_f_ground = filterGround, r_f_glider = filterGliders; int r_btn_pin = btnPin;
     xSemaphoreGive(configMutex);
     savePending = false;
     if (!ok) { req->send(500, "application/json", "{\"error\":\"Failed to write config\"}"); return; }
     JsonDocument doc;
     doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off;
+    doc["units"] = r_units; doc["f_ground"] = r_f_ground; doc["f_glider"] = r_f_glider; doc["btn_pin"] = r_btn_pin;
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });

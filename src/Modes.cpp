@@ -33,29 +33,40 @@ void modeFlight() {
   JsonArray ac = doc["ac"].as<JsonArray>();
   if (ac.size() == 0) { drawText("NO AIRCRAFT\nIN RANGE"); return; }
 
-  struct AcInfo { String flight; int alt; float dist; float spd; String reg; float hdg; };
+  struct AcInfo { String flight; int alt; float dist; float spd; String reg; float hdg; int vspd; String type; String country; };
   AcInfo sorted[3]; float dists[3] = {9999,9999,9999}; int count = 0;
+
+  bool snap_fGround, snap_fGlider;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  snap_fGround = filterGround; snap_fGlider = filterGliders;
+  xSemaphoreGive(configMutex);
 
   for (JsonObject a : ac) {
     if (!a["alt_baro"].is<int>()) continue;
     int alt = a["alt_baro"].as<int>();
-    if (alt <= 0) continue;
+
+    if (snap_fGround && alt <= 0) continue;
+    String cat = a["category"] | "";
+    if (snap_fGlider && (cat == "A4" || cat == "C0")) continue;
+
     float d    = a["dst"]    | 9999.0f;
     float spd  = a["gs"]     | 0.0f;
     float hdg  = a["track"]  | -1.0f;
+    int vspd   = a["baro_rate"] | 0;
     String fl  = a["flight"] | "???"; fl.trim();
     String reg = a["r"]      | "";
+    String country = a["trc"] | ""; 
     for (int i = 0; i < 3; i++) {
       if (d < dists[i]) {
         for (int j = 2; j > i; j--) { dists[j] = dists[j-1]; sorted[j] = sorted[j-1]; }
-        dists[i] = d; sorted[i] = {fl, alt, d, spd, reg, hdg};
+        dists[i] = d; sorted[i] = {fl, alt, d, spd, reg, hdg, vspd, "", country};
         if (count < 3) count++;
         break;
       }
     }
   }
 
-  String airline, route;
+  String airline, route, acType;
   if (sorted[0].flight.length() > 2) {
     HTTPClient http2; http2.setTimeout(5000);
     http2.begin("https://api.adsbdb.com/v0/callsign/" + sorted[0].flight);
@@ -69,6 +80,13 @@ void modeFlight() {
           JsonObject orig = fr["origin"], dest = fr["destination"];
           if (!orig.isNull() && !dest.isNull())
             route = String(orig["iata_code"] | "???") + " > " + String(dest["iata_code"] | "???");
+        }
+        JsonObject acObj = db["response"]["aircraft"];
+        if (!acObj.isNull()) {
+          String mfr = acObj["manufacturer"] | "";
+          String typ = acObj["type"] | "";
+          if (mfr.length() && typ.length()) acType = mfr + " " + typ;
+          else acType = typ;
         }
       }
     }
@@ -108,29 +126,71 @@ void modeFlight() {
   tft.setTextSize(1);
   if (airline.length()) { tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.setCursor(4,y); tft.print(airline); y+=12; }
   if (route.length())   { tft.setTextColor(TFT_GREEN,  TFT_BLACK); tft.setCursor(4,y); tft.print(route);   y+=12; }
+  if (acType.length())  { tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); tft.setCursor(4,y); tft.print(acType); y+=12; }
   y += 4;
+
+  int snap_units;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  snap_units = units;
+  xSemaphoreGive(configMutex);
+
+  float dispAlt = sorted[0].alt, dispDist = sorted[0].dist, dispSpd = sorted[0].spd, dispVSpd = sorted[0].vspd;
+  const char* uAlt = "ft", *uDist = "nm", *uSpd = "kts", *uVSpd = "fpm";
+  
+  if (snap_units == 1) { // Metric
+    dispAlt *= 0.3048f; uAlt = "m";
+    dispDist *= 1.852f; uDist = "km";
+    dispSpd *= 1.852f;  uSpd = "km/h";
+    dispVSpd *= 0.3048f; uVSpd = "mpm";
+  }
+
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("ALT  %d ft",    sorted[0].alt);            y+=12;
-  tft.setCursor(4,y); tft.printf("DIST %.1f nm",  sorted[0].dist);           y+=12;
-  tft.setCursor(4,y); tft.printf("SPD  %.0f kts", sorted[0].spd);            y+=12;
+  tft.setCursor(4,y); tft.printf("ALT  %.0f %s", dispAlt, uAlt);            y+=12;
+  tft.setCursor(4,y); tft.printf("DIST %.1f %s",  dispDist, uDist);          y+=12;
+  tft.setCursor(4,y); tft.printf("SPD  %.0f %s", dispSpd, uSpd);           y+=12;
+  tft.setCursor(4,y); tft.printf("V/S  %.0f %s", dispVSpd, uVSpd);          y+=12;
+
   if (sorted[0].hdg >= 0) { tft.setCursor(4,y); tft.printf("HDG  %.0f %s", sorted[0].hdg, headingArrow(sorted[0].hdg)); y+=12; }
-  if (sorted[0].reg.length()) { tft.setCursor(4,y); tft.printf("REG  %s", sorted[0].reg.c_str()); y+=12; }
+  
+  if (sorted[0].reg.length()) { 
+    tft.setCursor(4,y); tft.printf("REG  %s", sorted[0].reg.c_str()); 
+    if (sorted[0].country.length() == 2) {
+      String flagUrl = "https://flagcdn.com/w40/" + sorted[0].country + ".jpg";
+      HTTPClient fhttp; 
+      WiFiClientSecure fclient; fclient.setInsecure();
+      fhttp.begin(fclient, flagUrl);
+      if (fhttp.GET() == 200) {
+        String fpayload = fhttp.getString();
+        TJpgDec.setJpgScale(1); 
+        TJpgDec.drawJpg(tft.getCursorX() + 6, y - 2, (const uint8_t*)fpayload.c_str(), fpayload.length());
+      }
+      fhttp.end();
+    }
+    y+=12; 
+  }
   y+=8; tft.drawFastHLine(4,y,312,TFT_DARKGREY); y+=4;
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   for (int i = 1; i < count; i++) {
-    tft.setCursor(4,y); tft.printf("%s  %dft  %.1fnm", sorted[i].flight.c_str(), sorted[i].alt, sorted[i].dist); y+=12;
+    float sAlt = sorted[i].alt, sDist = sorted[i].dist;
+    if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
+    tft.setCursor(4,y); tft.printf("%s  %.0f%s  %.1f%s", sorted[i].flight.c_str(), sAlt, uAlt, sDist, uDist); y+=12;
   }
 
   String txt = "FLIGHT RADAR\n" + sorted[0].flight;
   if (airline.length()) txt += "\n" + airline;
   if (route.length())   txt += "\n" + route;
-  txt += "\nALT  " + String(sorted[0].alt) + " ft";
-  txt += "\nDIST " + String(sorted[0].dist, 1) + " nm";
-  txt += "\nSPD  " + String((int)sorted[0].spd) + " kts";
+  if (acType.length())  txt += "\n" + acType;
+  txt += "\nALT  " + String(dispAlt, 0) + " " + uAlt;
+  txt += "\nDIST " + String(dispDist, 1) + " " + uDist;
+  txt += "\nSPD  " + String((int)dispSpd) + " " + uSpd;
+  txt += "\nV/S  " + String((int)dispVSpd) + " " + uVSpd;
   if (sorted[0].hdg >= 0) txt += "\nHDG  " + String((int)sorted[0].hdg) + " " + headingArrow(sorted[0].hdg);
   if (sorted[0].reg.length()) txt += "\nREG  " + sorted[0].reg;
-  for (int i = 1; i < count; i++)
-    txt += "\n" + sorted[i].flight + "  " + String(sorted[i].alt) + "ft  " + String(sorted[i].dist,1) + "nm";
+  for (int i = 1; i < count; i++) {
+    float sAlt = sorted[i].alt, sDist = sorted[i].dist;
+    if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
+    txt += "\n" + sorted[i].flight + "  " + String(sAlt, 0) + uAlt + "  " + String(sDist, 1) + uDist;
+  }
   setPreview(txt);
 }
 

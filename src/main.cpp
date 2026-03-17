@@ -56,6 +56,12 @@ void setup() {
   TJpgDec.setSwapBytes(true); // TFT_eSPI requires byte swapping
   TJpgDec.setCallback(tft_output);
 
+  int bPin;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  bPin = btnPin;
+  xSemaphoreGive(configMutex);
+  if (bPin >= 0) pinMode(bPin, INPUT_PULLUP);
+
   drawText("BOOTING...");
 
   setupServer();

@@ -8,6 +8,10 @@ float  lat      = 0;
 float  lon      = 0;
 int    range_km = 10;
 int    mode     = 1;
+int    units    = 0; // 0: Imperial, 1: Metric
+bool   filterGround  = false;
+bool   filterGliders = false;
+int    btnPin   = 0; // Default to GPIO 0 (often BOOT button)
 String timezone = "Asia/Kolkata";
 long   tzOffset = 19800;
 String dashUser = "admin";
@@ -30,6 +34,10 @@ bool saveConfig() {
   doc["lat"]       = lat;
   doc["lon"]       = lon;
   doc["range_km"]  = range_km;
+  doc["units"]     = units;
+  doc["f_ground"]  = filterGround;
+  doc["f_glider"]  = filterGliders;
+  doc["btn_pin"]   = btnPin;
   doc["timezone"]  = timezone;
   doc["tzOffset"]  = tzOffset;
 
@@ -77,6 +85,10 @@ void loadConfig() {
   if (doc["lat"].is<float>())             lat      = doc["lat"].as<float>();
   if (doc["lon"].is<float>())             lon      = doc["lon"].as<float>();
   if (doc["range_km"].is<int>())          range_km = doc["range_km"].as<int>();
+  if (doc["units"].is<int>())             units    = doc["units"].as<int>();
+  if (doc["f_ground"].is<bool>())         filterGround = doc["f_ground"].as<bool>();
+  if (doc["f_glider"].is<bool>())         filterGliders = doc["f_glider"].as<bool>();
+  if (doc["btn_pin"].is<int>())           btnPin   = doc["btn_pin"].as<int>();
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
   xSemaphoreGive(configMutex);

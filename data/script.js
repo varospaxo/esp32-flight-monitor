@@ -338,15 +338,15 @@ function togglePreview() {
     previewMode = 'text';
     cvWrap.style.display = 'none';
     txWrap.style.display = 'block';
-    btn.textContent = '🖥️ Display View';
-  } else {
-    previewMode = 'canvas';
-    cvWrap.style.display = '';
-    txWrap.style.display = 'none';
     btn.textContent = '📄 Text View';
     // redraw canvas immediately when switching back
     if (lastData && lastData.preview) renderPreview(lastData);
   }
+}
+
+function updateLiveView(preview) {
+  const lv = document.getElementById('live-text');
+  if (lv) lv.textContent = preview || '(no data)';
 }
 
 // ─── Render Dispatch ─────────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ async function updateStatus() {
     if (!j.updating) {
       // Only redraw when the update is complete — avoids stale/torn preview
       renderPreview(j);
-      document.getElementById('preview-text').textContent = j.preview || '(no data)';
+      updateLiveView(j.preview);
     }
 
     document.getElementById('ip-badge').textContent = j.ip;
@@ -451,6 +451,12 @@ async function loadConfig() {
     document.getElementById('timezone').value = c.timezone || 'Asia/Kolkata';
     document.getElementById('timezone').dataset.offset = c.tzOffset || 19800;
     document.getElementById('wifi-ssid').value = c.wifi_ssid || '';
+    
+    if (document.getElementById('units')) document.getElementById('units').value = c.units || 0;
+    if (document.getElementById('f-ground')) document.getElementById('f-ground').checked = c.f_ground || false;
+    if (document.getElementById('f-glider')) document.getElementById('f-glider').checked = c.f_glider || false;
+    if (document.getElementById('btn-pin')) document.getElementById('btn-pin').value = c.btn_pin !== undefined ? c.btn_pin : 0;
+
     currentMode = c.mode;
     highlightMode(currentMode);
   } catch (e) {
@@ -465,7 +471,11 @@ async function saveConfig() {
     lon:      document.getElementById('lon').value,
     range:    document.getElementById('range').value,
     timezone: document.getElementById('timezone').value,
-    tzOffset: document.getElementById('timezone').dataset.offset || 19800
+    tzOffset: document.getElementById('timezone').dataset.offset || 19800,
+    units:    document.getElementById('units').value,
+    f_ground: document.getElementById('f-ground').checked,
+    f_glider: document.getElementById('f-glider').checked,
+    btn_pin:  document.getElementById('btn-pin').value
   });
   try {
     const r = await fetch('/api/config/save', {
@@ -480,6 +490,12 @@ async function saveConfig() {
     document.getElementById('range').value    = saved.range;
     document.getElementById('timezone').value = saved.timezone || '';
     if (saved.tzOffset) document.getElementById('timezone').dataset.offset = saved.tzOffset;
+
+    if (saved.units !== undefined)  document.getElementById('units').value = saved.units;
+    if (saved.f_ground !== undefined) document.getElementById('f-ground').checked = saved.f_ground;
+    if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;
+    if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;
+
     toast('Settings saved \u2713');
   } catch (e) {
     toast('Save failed \u2014 check connection');

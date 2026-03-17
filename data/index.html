@@ -44,6 +44,9 @@
     <div class="canvas-wrap" id="canvas-wrap">
       <canvas id="tft" width="320" height="240"></canvas>
     </div>
+    <div id="live-view-wrap" style="margin-top:10px; padding:10px; background:#111; border-radius:4px; font-family:monospace; color:#0f0; white-space:pre-wrap; display:none;">
+      <div id="live-text">Waiting for data...</div>
+    </div>
     <div class="text-wrap" id="text-wrap" style="display:none">
       <pre id="preview-text">Waiting for data...</pre>
     </div>
@@ -64,6 +67,25 @@
 
       <label>Range (km)</label>
       <input type="number" id="range" min="1" max="500" placeholder="10">
+
+      <label>Units</label>
+      <select id="units">
+        <option value="0">Imperial (ft, kts, nm)</option>
+        <option value="1">Metric (m, km/h, km)</option>
+      </select>
+
+      <label>Filters</label>
+      <div style="display:flex; gap:15px; grid-column: 2;">
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" id="f-ground"> Hide Grounded
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" id="f-glider"> Hide Gliders
+        </label>
+      </div>
+
+      <label>Button Pin</label>
+      <input type="number" id="btn-pin" min="-1" max="40" placeholder="0">
 
       <label>Timezone</label>
       <input type="text" id="timezone" placeholder="Asia/Kolkata" data-offset="19800">
