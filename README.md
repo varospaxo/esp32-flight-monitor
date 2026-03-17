@@ -46,6 +46,7 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - [ADSB DB](https://adsbdb.com/) – Aircraft and flight route information.
 - [AirHex](https://airhex.com/) – Airline logos.
 - [Open-Meteo](https://open-meteo.com/) – Weather and Air Quality Index data.
+- [rzeldent/esp32-flightradar24-ttgo](https://github.com/rzeldent/esp32-flightradar24-ttgo) – Inspiration for the UI layout and features.
 
 ### 3D Printed Cases
 - **Case 1**: [2.8" TFT ili9341 SPI Case](https://www.thingiverse.com/thing:3461768) by AlexSk.

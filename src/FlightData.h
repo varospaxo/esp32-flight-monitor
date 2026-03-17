@@ -11,6 +11,7 @@ extern String inferred_apt_name;
 extern String inferred_apt_city;
 extern String inferred_apt_icao;
 
-void inferAirport(JsonArray ac);
+bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLon);
+void inferAirport(JsonArray ac); // Wrapper for convenience if needed, but we'll use the specific one for memory safety
 
 #endif // FLIGHT_DATA_H

@@ -94,63 +94,105 @@ function loadLogo(icao) {
 
 // ─── Mode Renderers ──────────────────────────────────────────────────────────
 
-function renderFlight(lines) {
-  // lines[0]='FLIGHT RADAR', [1]=callsign, [2]=airline?, [3]=route?, then stats
+function renderFlight(rawLines) {
+  // rawLines[0] = "FLIGHT RADAR"
+  // rawLines[1] = "Callsign|Route|1/1|Alt|VS|Spd|Reg|Type|Coords|Hdg|Airline|OrigFull|OrigCountry|DestFull|DestCountry"
   clear();
-  header(' FLIGHT RADAR', C.CYAN);
+  
+  if (rawLines.length < 2) { 
+    header(' FLIGHT RADAR', C.CYAN);
+    textCenter(80, 'NO DATA', C.DARKGREY, 1); 
+    return; 
+  }
+  const lines = rawLines[1].split('|');
+  if (lines.length < 2) { 
+    header(' FLIGHT RADAR', C.CYAN);
+    textCenter(80, 'NO DATA', C.DARKGREY, 1); 
+    return; 
+  }
 
-  let y = 24, i = 1;
-  if (!lines[i]) { textCenter(80, 'NO DATA', C.DARKGREY, 1); return; }
+  const callsign = lines[0] || '---';
+  const route    = (lines[1] || '').replace('-', ' > ');
+  const index    = lines[2] || '1/1';
+  const alt      = lines[3] || '';
+  const vspd     = lines[4] || '';
+  const spd      = lines[5] || '';
+  const dist     = lines[6] || '';
+  const reg      = lines[7] || '';
+  const type     = lines[8] || '';
+  const coords   = lines[9] || '';
+  const hdg      = lines[10] || '';
+  const airline  = lines[11] || '';
+  const oFull    = lines[12] || '';
+  const oCountry = lines[13] || '';
+  const dFull    = lines[14] || '';
+  const dCountry = lines[15] || '';
 
-  // ── Airline logo (top-right) ──
-  const callsign = (lines[i] || '').trim();
+  // Header Bar (matching TFT)
+  ctx.fillStyle = C.CYAN;
+  ctx.fillRect(0, 0, W, 22);
+  ctx.fillStyle = C.BLACK;
+  ctx.font = 'bold 16px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(callsign + ' ' + route, 4, 11);
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(index, 316, 11);
+  ctx.textAlign = 'left';
+
+  let y = 26; // Start below header
+
+  // Row 1: Alt, V/S, Speed
+  text(4, y, alt, C.WHITE, 1);
+  const vsVal = parseInt(vspd);
+  const vsColor = vsVal > 100 ? C.GREEN : (vsVal < -100 ? C.RED : C.WHITE);
+  text(100, y, vspd, vsColor, 1);
+  text(185, y, dist, C.YELLOW, 1);
+  text(255, y, spd, C.WHITE, 1);
+  y += 14;
+
+  // Row 2: Reg, Type
+  text(4, y, reg + (type ? '  ' + type : ''), C.WHITE, 1);
+  y += 14;
+
+  // Row 3: Coords, Hdg
+  text(4, y, coords, C.LIGHTGREY, 1);
+  if (hdg !== '---') text(240, y, hdg + '°', C.LIGHTGREY, 1);
+  y += 16;
+
+  // Row 4: Airline + Logo
+  text(4, y, airline, C.WHITE, 1);
   const icao = callsign.replace(/[^A-Z]/gi, '').substring(0, 3).toUpperCase();
   if (icao.length === 3) {
     const logo = loadLogo(icao);
     if (logo.ok && logo.img) {
-      const logoSize = 52;
-      const lx = W - logoSize - 6, ly = 24;
-      // Dark rounded background
-      ctx.fillStyle = '#181818';
-      ctx.beginPath();
-      ctx.roundRect(lx - 4, ly - 4, logoSize + 8, logoSize + 8, 6);
-      ctx.fill();
-      ctx.drawImage(logo.img, lx, ly, logoSize, logoSize);
+      ctx.strokeStyle = C.DARKGREY;
+      ctx.strokeRect(259, 39, 52, 52);
+      ctx.drawImage(logo.img, 260, 40, 50, 50);
     }
   }
+  y += 24;
 
-  // Callsign big
-  text(4, y, callsign || '---', C.WHITE, 2); y += 20; i++;
-
-  // optional airline (yellow) and route (green)
-  const nextLines = lines.slice(i);
-  let airline = '', route = '';
-  for (const l of nextLines) {
-    if (/^[A-Z]{2,3}\d+ ?$/.test(l) || l.startsWith('ALT')) break;
-    if (!airline) { airline = l; text(4, y, l, C.YELLOW, 1); y += 12; i++; }
-    else if (l.includes('>')) { route = l; text(4, y, l, C.GREEN, 1); y += 12; i++; }
-  }
-
-  y += 4;
-  for (; i < lines.length; i++) {
-    const l = lines[i];
-    if (!l) continue;
-    if (l.startsWith('ALT') || l.startsWith('DIST') || l.startsWith('SPD') ||
-        l.startsWith('HDG') || l.startsWith('REG')) {
-      text(4, y, l, C.WHITE, 1); y += 13;
-    } else {
-      // summary entries below separator
-      break;
+  // Row 5/6: Airports + Flags
+  const drawApt = (curY, fullName, country) => {
+    if (!fullName) return;
+    if (country) {
+      const flagImg = new Image();
+      flagImg.src = `https://flagcdn.com/w40/${country.toLowerCase()}.png`;
+      flagImg.onload = () => ctx.drawImage(flagImg, 4, curY - 2, 20, 14);
     }
-  }
+    text(28, curY, fullName, C.CYAN, 1);
+  };
 
-  // Divider
-  hline(4, y + 4, 312, C.DARKGREY); y += 10;
+  y = 110;
+  drawApt(y, oFull, oCountry); y += 16;
+  drawApt(y, dFull, dCountry); y += 20;
 
-  // Secondary aircraft
-  for (; i < lines.length; i++) {
-    if (!lines[i]) continue;
-    text(4, y, lines[i], C.LIGHTGREY, 1); y += 12;
+  // Divider + Secondary
+  hline(4, y, 312, C.DARKGREY); y += 8;
+  for (let j = 2; j < rawLines.length; j++) {
+    text(4, y, rawLines[j], C.DARKGREY, 1);
+    y += 12;
   }
 }
 
@@ -175,14 +217,21 @@ function renderAirport(lines) {
     return;
   }
   
-  // Header line for columns
-  ctx.fillStyle = C.DARKGREY; ctx.font = '7px monospace';
-  ctx.fillText('FLIGHT', 4, y); ctx.fillText('ALTITUDE', 130, y); ctx.fillText('DISTANCE', 220, y);
-  y += 12;
-
+  let hasArr = false, hasDep = false;
   for (let i = 3; i < lines.length && y < H - 14; i++) {
-    const l = lines[i];
+    let l = lines[i];
     if (!l) continue;
+    
+    if (l.startsWith('ARR:') && !hasArr) {
+      text(4, y, 'ARRIVALS', C.CYAN, 1); y += 12; hasArr = true;
+      l = l.substring(4);
+    } else if (l.startsWith('DEP:') && !hasDep) {
+      text(4, y, 'DEPARTURES', C.MAGENTA, 1); y += 12; hasDep = true;
+      l = l.substring(4);
+    } else if (l.startsWith('ARR:') || l.startsWith('DEP:')) {
+      l = l.substring(4);
+    }
+
     const parts = l.split('|');
     text(4, y, parts[0] || l, C.WHITE, 1);
     if (parts[1]) text(130, y, parts[1].trim(), C.GREEN, 1);
@@ -221,32 +270,50 @@ function renderRadar(lines, rangeKm) {
 
   const rangeNm = (rangeKm || 10) * 0.54;
 
-  // Aircraft or Airport — each line: "FL123 12.3nm 35000ft 285°" or "[APT] BOM 12.3nm 285°"
+  // Aircraft or Airport
   for (let i = 1; i < lines.length; i++) {
     let line = lines[i];
     const isApt = line.startsWith('[APT] ');
     if (isApt) line = line.substring(6).trim();
+    console.log(`Radar Line: ${line} (Apt: ${isApt})`);
     
-    const parts = line.split(' ');
-    if (parts.length < 2) continue;
-    const nm = parseFloat(parts[1]);
-    const hdg = line.match(/(\d+)°/);
-    if (!nm || nm > rangeNm) continue;
+    const nmMatch = line.match(/(\d+\.?\d*)nm/);
+    if (!nmMatch) continue;
+    const nm = parseFloat(nmMatch[1]);
+    if (nm > rangeNm) continue;
 
-    // Approximate pixel position from distance/heading
-    const angle = hdg ? (parseFloat(hdg[1]) - 90) * Math.PI / 180 : (i * 60) * Math.PI / 180;
+    // Position: B{bearing}
+    // Heading:  T{track}
+    const bMatch = line.match(/ B(\d+)/);
+    const tMatch = line.match(/ T(\d+)/);
+    
+    // Bearing for position (0 is North)
+    const bearing = bMatch ? parseFloat(bMatch[1]) : (i * 60);
+    const bRad = (bearing - 90) * Math.PI / 180;
     const r = (nm / rangeNm) * maxR;
-    const px = Math.round(cx + r * Math.cos(angle));
-    const py = Math.round(cy + r * Math.sin(angle));
+    const px = Math.round(cx + r * Math.cos(bRad));
+    const py = Math.round(cy + r * Math.sin(bRad));
 
     if (isApt) {
       dot(px, py, 4, C.RED);
       ctx.fillStyle = C.RED; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-      ctx.fillText(parts[0], px + 5, py - 4);
+      ctx.fillText(line.split(' ')[0] || 'APT', px + 5, py - 4);
     } else {
-      dot(px, py, 3, C.CYAN);
-      ctx.fillStyle = C.WHITE; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-      ctx.fillText(parts[0], px + 5, py - 4);
+      ctx.fillStyle = C.CYAN;
+      if (tMatch) {
+         const track = parseFloat(tMatch[1]);
+         const tRad = (track - 90) * Math.PI / 180;
+         ctx.strokeStyle = C.CYAN;
+         ctx.beginPath();
+         ctx.moveTo(px, py);
+         ctx.lineTo(px + Math.cos(tRad) * 10, py + Math.sin(tRad) * 10);
+         ctx.stroke();
+         dot(px, py, 2, C.CYAN);
+      } else {
+         dot(px, py, 3, C.CYAN);
+      }
+      ctx.fillStyle = C.YELLOW; ctx.font = '7px monospace'; ctx.textAlign = 'left';
+      ctx.fillText(line.split(' ')[0], px + 5, py - 4);
     }
   }
 }

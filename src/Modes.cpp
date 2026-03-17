@@ -21,65 +21,107 @@ void modeFlight() {
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat, 4)
              + "/lon/" + String(c_lon, 4)
              + "/dist/" + String(c_range * 0.54f, 1);
+  Serial.printf("ADSB.fi fetch: %s\n", api.c_str());
 
-  HTTPClient http; http.setTimeout(8000); http.begin(api);
-  int code = http.GET();
-  if (code != 200) { drawText("FLIGHT ERR " + String(code)); http.end(); return; }
-  String body = http.getString(); http.end();
-  adsbOk = true; lastSuccess = millis();
-
-  JsonDocument doc;
-  if (deserializeJson(doc, body)) { drawText("FLIGHT PARSE ERR"); return; }
-  JsonArray ac = doc["ac"].as<JsonArray>();
-  if (ac.size() == 0) { drawText("NO AIRCRAFT\nIN RANGE"); return; }
-
-  struct AcInfo { String flight; int alt; float dist; float spd; String reg; float hdg; int vspd; String type; String country; };
+  struct AcInfo { 
+    String flight; int alt; float dist; float spd; String reg; float hdg; int vspd; String type; String cat; String country; 
+    float lat; float lon;
+  };
   AcInfo sorted[3]; float dists[3] = {9999,9999,9999}; int count = 0;
-
   bool snap_fGround, snap_fGlider;
-  xSemaphoreTake(configMutex, portMAX_DELAY);
-  snap_fGround = filterGround; snap_fGlider = filterGliders;
-  xSemaphoreGive(configMutex);
+  int totalAcCount = 0;
+  {
+    WiFiClientSecure client; client.setInsecure();
+    HTTPClient http; http.setTimeout(10000); http.begin(client, api);
+    http.setUserAgent("Mozilla/5.0");
+    int code = http.GET();
+    Serial.printf("ADSB.fi status: %d\n", code);
+    if (code != 200) { drawText("FLIGHT ERR " + String(code)); http.end(); return; }
+    
+    adsbOk = true; lastSuccess = millis();
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, http.getStream());
+    http.end();
+    if (err) { 
+      Serial.printf("FLIGHT PARSE ERR: %s\n", err.c_str());
+      drawText("FLIGHT PARSE ERR"); return; 
+    }
+    JsonArray ac = doc["ac"].as<JsonArray>();
+    totalAcCount = ac.size();
+    int airCount = 0, groundCount = 0;
+    for (JsonObject a : ac) {
+      if (a["alt_baro"].as<String>() == "ground") groundCount++;
+      else airCount++;
+    }
+    Serial.printf("ADSB flights found: %d (Air: %d, Ground: %d)\n", totalAcCount, airCount, groundCount);
+    if (totalAcCount == 0) { drawText("NO AIRCRAFT\nIN RANGE"); return; }
 
-  for (JsonObject a : ac) {
-    if (!a["alt_baro"].is<int>()) continue;
-    int alt = a["alt_baro"].as<int>();
+    xSemaphoreTake(configMutex, portMAX_DELAY);
+    snap_fGround = filterGround; snap_fGlider = filterGliders;
+    xSemaphoreGive(configMutex);
 
-    if (snap_fGround && alt <= 0) continue;
-    String cat = a["category"] | "";
-    if (snap_fGlider && (cat == "A4" || cat == "C0")) continue;
+    for (JsonObject a : ac) {
+      if (!a["alt_baro"].is<int>()) continue;
+      int alt = a["alt_baro"].as<int>();
+      if (snap_fGround && alt <= 0) continue;
+      String catCode = a["category"] | "";
+      if (snap_fGlider && (catCode == "A4" || catCode == "C0")) continue;
 
-    float d    = a["dst"]    | 9999.0f;
-    float spd  = a["gs"]     | 0.0f;
-    float hdg  = a["track"]  | -1.0f;
-    int vspd   = a["baro_rate"] | 0;
-    String fl  = a["flight"] | "???"; fl.trim();
-    String reg = a["r"]      | "";
-    String country = a["trc"] | ""; 
-    for (int i = 0; i < 3; i++) {
-      if (d < dists[i]) {
-        for (int j = 2; j > i; j--) { dists[j] = dists[j-1]; sorted[j] = sorted[j-1]; }
-        dists[i] = d; sorted[i] = {fl, alt, d, spd, reg, hdg, vspd, "", country};
-        if (count < 3) count++;
-        break;
+      float d    = a["dst"]    | 9999.0f;
+      float spd  = a["gs"]     | 0.0f;
+      float hdg  = a["track"]  | -1.0f;
+      int vspd   = a["baro_rate"] | 0;
+      String fl  = a["flight"] | "???"; fl.trim();
+      String reg = a["r"]      | "";
+      String type = a["t"]     | "";
+      String country = a["trc"] | ""; 
+      float alat = a["lat"]    | 0.0f;
+      float alon = a["lon"]    | 0.0f;
+
+      for (int i = 0; i < 3; i++) {
+        if (d < dists[i]) {
+          for (int j = 2; j > i; j--) { dists[j] = dists[j-1]; sorted[j] = sorted[j-1]; }
+          dists[i] = d; 
+          sorted[i] = {fl, alt, d, spd, reg, hdg, vspd, type, catCode, country, alat, alon};
+          if (count < 3) count++;
+          break;
+        }
       }
     }
-  }
+  } // doc destroyed here
 
-  String airline, route, acType;
-  if (sorted[0].flight.length() > 2) {
+  String airline, route, acType, originName, destName, originCountry, destCountry, originIcao, destIcao, originCity, destCity;
+  if (sorted[0].flight.length() > 2 && ESP.getFreeHeap() > 60000) {
+    WiFiClientSecure client2; client2.setInsecure();
     HTTPClient http2; http2.setTimeout(5000);
-    http2.begin("https://api.adsbdb.com/v0/callsign/" + sorted[0].flight);
+    http2.begin(client2, "https://api.adsbdb.com/v0/callsign/" + sorted[0].flight);
+    http2.setUserAgent("Mozilla/5.0");
     if (http2.GET() == 200) {
       JsonDocument db;
-      if (!deserializeJson(db, http2.getString())) {
+      DeserializationError err = deserializeJson(db, http2.getStream());
+      if (!err) {
         JsonObject fr = db["response"]["flightroute"];
         if (!fr.isNull()) {
           JsonObject al = fr["airline"];
           if (!al.isNull()) airline = al["name"] | "";
-          JsonObject orig = fr["origin"], dest = fr["destination"];
-          if (!orig.isNull() && !dest.isNull())
-            route = String(orig["iata_code"] | "???") + " > " + String(dest["iata_code"] | "???");
+          
+          JsonObject orig = fr["origin"];
+          JsonObject dest = fr["destination"];
+          if (!orig.isNull() && !dest.isNull()) {
+            originName = orig["name"] | "";
+            originIcao = orig["icao_code"] | "";
+            originCountry = orig["country_iso_name"] | "";
+            originCity = orig["municipality"] | "";
+            
+            destName = dest["name"] | "";
+            destIcao = dest["icao_code"] | "";
+            destCountry = dest["country_iso_name"] | "";
+            destCity = dest["municipality"] | "";
+
+            String oCode = orig["iata_code"] | originIcao;
+            String dCode = dest["iata_code"] | destIcao;
+            if (oCode.length() && dCode.length()) route = oCode + "-" + dCode;
+          }
         }
         JsonObject acObj = db["response"]["aircraft"];
         if (!acObj.isNull()) {
@@ -93,141 +135,243 @@ void modeFlight() {
     http2.end();
   }
 
-  tftClear(); tftHeader(" FLIGHT RADAR", TFT_CYAN);
-  int y = 28;
-
-  String icao = "";
-  for (int i = 0; i < (int)sorted[0].flight.length(); i++) {
-    char c = sorted[0].flight.charAt(i);
-    if (c >= 'A' && c <= 'Z') icao += c;
-    if (icao.length() == 3) break;
+  // Build clean city/name strings for display and preview
+  String fullOrig = "";
+  if (originName.length()) {
+    if (originCity.length()) fullOrig += originCity + ", ";
+    fullOrig += originName;
+    if (originIcao.length()) fullOrig += " (" + originIcao + ")";
   }
   
-  if (icao.length() == 3) {
-    WiFiClientSecure clientLogo;
-    clientLogo.setInsecure();
-    HTTPClient httpLogo; httpLogo.setTimeout(5000);
-    String logoUrl = "https://content.airhex.com/content/logos/airlines_" + icao + "_200_200_s.jpg";
-    httpLogo.begin(clientLogo, logoUrl);
-    if (httpLogo.GET() == 200) {
-      int logoSize = 52;
-      int lx = 320 - logoSize - 6;
-      int ly = 24;
-      tft.fillRoundRect(lx - 4, ly - 4, logoSize + 8, logoSize + 8, 6, tft.color565(24, 24, 24));
-      String payload = httpLogo.getString();
-      TJpgDec.setJpgScale(4);
-      TJpgDec.drawJpg(lx + 1, ly + 1, (const uint8_t*)payload.c_str(), payload.length());
-    }
-    httpLogo.end();
+  String fullDest = "";
+  if (destName.length()) {
+    if (destCity.length()) fullDest += destCity + ", ";
+    fullDest += destName;
+    if (destIcao.length()) fullDest += " (" + destIcao + ")";
   }
 
-  tft.setTextColor(TFT_WHITE, TFT_BLACK); tft.setTextSize(2);
-  tft.setCursor(4, y); tft.print(sorted[0].flight); y += 20;
-  tft.setTextSize(1);
-  if (airline.length()) { tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.setCursor(4,y); tft.print(airline); y+=12; }
-  if (route.length())   { tft.setTextColor(TFT_GREEN,  TFT_BLACK); tft.setCursor(4,y); tft.print(route);   y+=12; }
-  if (acType.length())  { tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); tft.setCursor(4,y); tft.print(acType); y+=12; }
-  y += 4;
+  tftClear();
+  tft.fillRect(0, 0, 320, 22, TFT_CYAN);
+  tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.setTextSize(2);
+  tft.setCursor(4, 4); tft.print(sorted[0].flight + (route.length() ? " " + route : "")); 
+  tft.setTextSize(1); tft.setCursor(290, 8); tft.print(String(1) + "/" + String(totalAcCount)); 
+
+  int y = 26; 
 
   int snap_units;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   snap_units = units;
   xSemaphoreGive(configMutex);
 
-  float dispAlt = sorted[0].alt, dispDist = sorted[0].dist, dispSpd = sorted[0].spd, dispVSpd = sorted[0].vspd;
-  const char* uAlt = "ft", *uDist = "nm", *uSpd = "kts", *uVSpd = "fpm";
-  
+  float dAlt = sorted[0].alt, dSpd = sorted[0].spd, dVSpd = sorted[0].vspd, dDist = sorted[0].dist;
+  const char* uAlt = "ft", *uSpd = "kts", *uVSpd = "fpm", *uDist = "nm";
   if (snap_units == 1) { // Metric
-    dispAlt *= 0.3048f; uAlt = "m";
-    dispDist *= 1.852f; uDist = "km";
-    dispSpd *= 1.852f;  uSpd = "km/h";
-    dispVSpd *= 0.3048f; uVSpd = "mpm";
+    dAlt *= 0.3048f; uAlt = "m";
+    dSpd *= 1.852f;  uSpd = "km/h";
+    dVSpd *= 0.3048f; uVSpd = "m/m";
+    dDist *= 1.852f; uDist = "km";
   }
 
+  // Row 1: Alt, V/S, Speed
+  tft.setTextSize(1);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("ALT  %.0f %s", dispAlt, uAlt);            y+=12;
-  tft.setCursor(4,y); tft.printf("DIST %.1f %s",  dispDist, uDist);          y+=12;
-  tft.setCursor(4,y); tft.printf("SPD  %.0f %s", dispSpd, uSpd);           y+=12;
-  tft.setCursor(4,y); tft.printf("V/S  %.0f %s", dispVSpd, uVSpd);          y+=12;
-
-  if (sorted[0].hdg >= 0) { tft.setCursor(4,y); tft.printf("HDG  %.0f %s", sorted[0].hdg, headingArrow(sorted[0].hdg)); y+=12; }
+  tft.setCursor(4, y); tft.printf("%.0f%s", dAlt, uAlt);
   
-  if (sorted[0].reg.length()) { 
-    tft.setCursor(4,y); tft.printf("REG  %s", sorted[0].reg.c_str()); 
-    if (sorted[0].country.length() == 2) {
-      String flagUrl = "https://flagcdn.com/w40/" + sorted[0].country + ".jpg";
-      HTTPClient fhttp; 
-      WiFiClientSecure fclient; fclient.setInsecure();
+  uint16_t vsColor = dVSpd > 100 ? TFT_GREEN : (dVSpd < -100 ? TFT_RED : TFT_WHITE);
+  tft.setTextColor(vsColor, TFT_BLACK);
+  tft.setCursor(100, y); tft.printf("%.0f%s", dVSpd, uVSpd);
+  
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setCursor(185, y); tft.printf("%.1f%s", dDist, uDist);
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(255, y); tft.printf("%.0f%s", dSpd, uSpd);
+  y += 14;
+
+  // Row 2: Reg, Model
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  String modelStr = acType;
+  if (modelStr.length() == 0) modelStr = sorted[0].type;
+  if (modelStr.length() == 0) modelStr = categoryName(sorted[0].cat);
+  String row2 = sorted[0].reg + "  " + modelStr;
+  tft.setCursor(4, y); tft.print(row2);
+  y += 14;
+
+  // Row 3: Coords, Hdg
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(4, y); tft.print(formatDMS(sorted[0].lat, true) + " " + formatDMS(sorted[0].lon, false));
+  if (sorted[0].hdg >= 0) {
+    tft.setCursor(240, y); tft.printf("%.0f\xC2\xB0", sorted[0].hdg);
+  }
+  y += 16;
+
+  // Row 4: Airline
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(4, y); tft.print(airline);
+  
+  // Airline Logo
+  String icao_al = "";
+  for (int i = 0; i < (int)sorted[0].flight.length(); i++) {
+    char c = sorted[0].flight.charAt(i);
+    if (c >= 'A' && c <= 'Z') icao_al += c;
+    if (icao_al.length() == 3) break;
+  }
+  if (icao_al.length() == 3 && ESP.getFreeHeap() > 60000) {
+    WiFiClientSecure clientLogo; clientLogo.setInsecure();
+    HTTPClient httpLogo; httpLogo.setTimeout(5000);
+    String logoUrl = "https://content.airhex.com/content/logos/airlines_" + icao_al + "_200_200_s.jpg";
+    httpLogo.begin(clientLogo, logoUrl);
+    httpLogo.setUserAgent("Mozilla/5.0");
+    if (httpLogo.GET() == 200) {
+      int lx = 260, ly = 40, lsize = 50;
+      tft.drawRect(lx-1, ly-1, lsize+2, lsize+2, TFT_DARKGREY);
+      String payload = httpLogo.getString();
+      if (payload.length() > 0) {
+        TJpgDec.setJpgScale(4);
+        TJpgDec.drawJpg(lx, ly, (const uint8_t*)payload.c_str(), payload.length());
+      }
+      payload = ""; // Explicitly free memory
+    }
+    httpLogo.end();
+  }
+  y += 20;
+
+  // Bottom: Airport Names with Flags
+  auto drawAirport = [&](int curY, String name, String country) {
+    if (name.length() == 0) return;
+    int flagX = 4;
+    if (country.length() == 2 && ESP.getFreeHeap() > 60000) {
+      String flagUrl = "https://flagcdn.com/w40/" + country + ".jpg";
+      HTTPClient fhttp; WiFiClientSecure fclient; fclient.setInsecure();
       fhttp.begin(fclient, flagUrl);
+      fhttp.setUserAgent("Mozilla/5.0");
       if (fhttp.GET() == 200) {
         String fpayload = fhttp.getString();
-        TJpgDec.setJpgScale(1); 
-        TJpgDec.drawJpg(tft.getCursorX() + 6, y - 2, (const uint8_t*)fpayload.c_str(), fpayload.length());
+        if (fpayload.length() > 0) {
+          TJpgDec.setJpgScale(1); 
+          TJpgDec.drawJpg(flagX, curY - 2, (const uint8_t*)fpayload.c_str(), fpayload.length());
+        }
+        fpayload = ""; // Explicitly free memory
       }
       fhttp.end();
     }
-    y+=12; 
-  }
-  y+=8; tft.drawFastHLine(4,y,312,TFT_DARKGREY); y+=4;
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.setCursor(flagX + 24, curY);
+    tft.print(name);
+  };
+
+  y = 110;
+  drawAirport(y, fullOrig, originCountry); y += 16;
+  drawAirport(y, fullDest, destCountry);     y += 20;
+
+  // Minimal list for others
+  tft.drawFastHLine(4, y, 312, TFT_DARKGREY); y += 6;
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
   for (int i = 1; i < count; i++) {
     float sAlt = sorted[i].alt, sDist = sorted[i].dist;
     if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
-    tft.setCursor(4,y); tft.printf("%s  %.0f%s  %.1f%s", sorted[i].flight.c_str(), sAlt, uAlt, sDist, uDist); y+=12;
+    tft.setCursor(4, y); tft.printf("%s %.0f%s %.1f%s", sorted[i].flight.c_str(), sAlt, uAlt, sDist, snap_units==1?"km":"nm");
+    y += 12;
   }
 
-  String txt = "FLIGHT RADAR\n" + sorted[0].flight;
-  if (airline.length()) txt += "\n" + airline;
-  if (route.length())   txt += "\n" + route;
-  if (acType.length())  txt += "\n" + acType;
-  txt += "\nALT  " + String(dispAlt, 0) + " " + uAlt;
-  txt += "\nDIST " + String(dispDist, 1) + " " + uDist;
-  txt += "\nSPD  " + String((int)dispSpd) + " " + uSpd;
-  txt += "\nV/S  " + String((int)dispVSpd) + " " + uVSpd;
-  if (sorted[0].hdg >= 0) txt += "\nHDG  " + String((int)sorted[0].hdg) + " " + headingArrow(sorted[0].hdg);
-  if (sorted[0].reg.length()) txt += "\nREG  " + sorted[0].reg;
+  String ptxt = "FLIGHT RADAR\n" + sorted[0].flight;
+  ptxt += "|" + route; 
+  ptxt += "|" + String(1) + "/" + String(totalAcCount); // Index/Total
+  ptxt += "|" + String(dAlt, 0) + uAlt;
+  ptxt += "|" + String(dVSpd, 0) + uVSpd;
+  ptxt += "|" + String(dSpd, 0) + uSpd;
+  ptxt += "|" + String(dDist, 1) + uDist; // Dist field
+  ptxt += "|" + sorted[0].reg;
+  ptxt += "|" + modelStr;
+  ptxt += "|" + formatDMS(sorted[0].lat, true) + " " + formatDMS(sorted[0].lon, false);
+  ptxt += "|" + (sorted[0].hdg >= 0 ? String(sorted[0].hdg, 0) : "---");
+  ptxt += "|" + airline;
+  ptxt += "|" + fullOrig + "|" + originCountry;
+  ptxt += "|" + fullDest + "|" + destCountry;
+  
+  // Secondary aircraft
   for (int i = 1; i < count; i++) {
     float sAlt = sorted[i].alt, sDist = sorted[i].dist;
     if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
-    txt += "\n" + sorted[i].flight + "  " + String(sAlt, 0) + uAlt + "  " + String(sDist, 1) + uDist;
+    ptxt += "\n" + sorted[i].flight + " " + String(sAlt, 0) + uAlt + " " + String(sDist, 1) + (snap_units==1?"km":"nm");
   }
-  setPreview(txt);
+  setPreview(ptxt);
 }
 
 void modeAirport() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
-  float c_lat, c_lon;
+  float c_lat, c_lon; int c_range;
   xSemaphoreTake(configMutex, portMAX_DELAY);
-  c_lat = lat; c_lon = lon;
+  c_lat = lat; c_lon = lon; c_range = range_km;
   xSemaphoreGive(configMutex);
-  String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat,4) + "/lon/" + String(c_lon,4) + "/dist/50";
-  HTTPClient http; http.setTimeout(8000); http.begin(api);
-  int code = http.GET();
-  if (code != 200) { drawText("AIRPORT ERR " + String(code)); http.end(); return; }
-  String body = http.getString(); http.end();
-  adsbOk = true; lastSuccess = millis();
-  JsonDocument doc;
-  if (deserializeJson(doc, body)) { drawText("PARSE ERR"); return; }
-  JsonArray ac = doc["ac"].as<JsonArray>();
-  struct Arrival { String flight; int alt; float dist; };
-  Arrival arrivals[8]; int arrCount = 0;
-  for (JsonObject a : ac) {
-    if (!a["alt_baro"].is<int>()) continue;
-    int alt = a["alt_baro"].as<int>();
-    if (alt <= 0) continue;
-    int baro_rate = a["baro_rate"] | 0;
-    if (alt < 10000 && baro_rate < -200) {
-      String fl = a["flight"] | "???"; fl.trim();
-      float d = a["dst"] | 999.0f;
-      if (arrCount < 8) {
-        int pos = arrCount;
-        for (int i = 0; i < arrCount; i++) if (alt < arrivals[i].alt) { pos = i; break; }
-        for (int j = arrCount; j > pos; j--) arrivals[j] = arrivals[j-1];
-        arrivals[pos] = {fl, alt, d}; arrCount++;
+  String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat,4) + "/lon/" + String(c_lon,4) + "/dist/" + String(c_range * 0.54f, 1);
+  Serial.printf("ADSB.fi Airport fetch: %s\n", api.c_str());
+  struct AcEntry { String flight; int alt; float dist; };
+  AcEntry arrivals[5]; int arrCount = 0;
+  AcEntry departures[5]; int depCount = 0;
+  String infFlight = ""; int infRate = 0; float infLat = 0, infLon = 0;
+
+  {
+    WiFiClientSecure client; client.setInsecure();
+    HTTPClient http; http.setTimeout(8000); http.begin(client, api);
+    http.setUserAgent("Mozilla/5.0");
+    int code = http.GET();
+    Serial.printf("ADSB.fi Airport status: %d\n", code);
+    if (code != 200) { drawText("AIRPORT ERR " + String(code)); http.end(); return; }
+    
+    adsbOk = true; lastSuccess = millis();
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, http.getStream());
+    http.end(); // Close connection early
+
+    if (err) { drawText("PARSE ERR"); return; }
+    JsonArray ac = doc["ac"].as<JsonArray>();
+    int total = ac.size();
+    int airCount = 0, groundCount = 0;
+    for (JsonObject a : ac) {
+      if (a["alt_baro"].as<String>() == "ground") groundCount++;
+      else airCount++;
+    }
+    Serial.printf("ADSB Airport ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
+
+    float best_alt = 99999;
+    for (JsonObject a : ac) {
+      if (!a["alt_baro"].is<int>()) continue;
+      int alt = a["alt_baro"].as<int>();
+      if (alt <= 0) continue;
+      int baro_rate = a["baro_rate"] | 0;
+      if (alt < 10000) {
+        String fl = a["flight"] | "???"; fl.trim();
+        float d = a["dst"] | 999.0f;
+        if (baro_rate < -200) { // Arrival
+          if (arrCount < 5) {
+            int pos = arrCount;
+            for (int i = 0; i < arrCount; i++) if (alt < arrivals[i].alt) { pos = i; break; }
+            for (int j = arrCount; j > pos; j--) arrivals[j] = arrivals[j-1];
+            arrivals[pos] = {fl, alt, d}; arrCount++;
+          }
+        } else if (baro_rate > 200) { // Departure
+          if (depCount < 5) {
+            int pos = depCount;
+            for (int i = 0; i < depCount; i++) if (alt < departures[i].alt) { pos = i; break; }
+            for (int j = depCount; j > pos; j--) departures[j] = departures[j-1];
+            departures[pos] = {fl, alt, d}; depCount++;
+          }
+        }
+      }
+      if (alt < best_alt && alt < 5000) {
+        best_alt = alt;
+        infFlight = a["flight"] | ""; infFlight.trim();
+        infLat = a["lat"] | 0.0f;
+        infLon = a["lon"] | 0.0f;
+        infRate = baro_rate;
       }
     }
+  } // doc and http stream are destroyed here
+
+  if (infFlight.length() > 2) {
+    fetchAirportInference(infFlight, infRate, infLat, infLon);
   }
-  inferAirport(ac);
   String airport = inferred_apt_code == "---" ? "LOCAL" : inferred_apt_code;
   tftClear(); tftHeader((" " + airport + " ARRIVALS").c_str(), TFT_ORANGE);
   int y = 28; tft.setTextSize(1);
@@ -238,21 +382,37 @@ void modeAirport() {
     tft.setCursor(4, y); tft.print(inferred_apt_icao + "  " + inferred_apt_city); y += 12;
     tft.setCursor(4, y); tft.printf("%.4f, %.4f", inferred_apt_lat, inferred_apt_lon); y += 16;
   } else { y += 12; }
-  if (arrCount == 0) {
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.setCursor(4,y); tft.print("No arrivals detected");
+  if (arrCount == 0 && depCount == 0) {
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.setCursor(4,y); tft.print("No traffic detected");
   } else {
-    for (int i = 0; i < min(arrCount, 5); i++) {
-      tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setCursor(4,   y); tft.print(arrivals[i].flight);
-      tft.setTextColor(TFT_GREEN,    TFT_BLACK); tft.setCursor(100, y); tft.printf("%d ft", arrivals[i].alt);
-      tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(220, y); tft.printf("%.1f nm", arrivals[i].dist);
-      y += 14;
+    if (arrCount > 0) {
+      tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4, y); tft.print("ARRIVALS"); y += 12;
+      for (int i = 0; i < arrCount; i++) {
+        tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setCursor(4,   y); tft.print(arrivals[i].flight);
+        tft.setTextColor(TFT_GREEN,    TFT_BLACK); tft.setCursor(100, y); tft.printf("%d ft", arrivals[i].alt);
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(220, y); tft.printf("%.1f nm", arrivals[i].dist);
+        y += 13;
+      }
+      y += 4;
+    }
+    if (depCount > 0) {
+      tft.setTextColor(TFT_MAGENTA, TFT_BLACK); tft.setCursor(4, y); tft.print("DEPARTURES"); y += 12;
+      for (int i = 0; i < depCount; i++) {
+        tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setCursor(4,   y); tft.print(departures[i].flight);
+        tft.setTextColor(TFT_GREEN,    TFT_BLACK); tft.setCursor(100, y); tft.printf("%d ft", departures[i].alt);
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(220, y); tft.printf("%.1f nm", departures[i].dist);
+        y += 13;
+      }
     }
   }
   String coords = String(inferred_apt_lat, 4) + "," + String(inferred_apt_lon, 4);
   String txt = "AIRPORT MONITOR\n" + airport + "\n" + inferred_apt_name + "|" + inferred_apt_city + "|" + inferred_apt_icao + "|" + coords + "\n";
-  for (int i = 0; i < min(arrCount,6); i++)
-    txt += arrivals[i].flight + "|" + String(arrivals[i].alt) + " ft|" + String(arrivals[i].dist,1) + " nm\n";
-  if (arrCount == 0) txt += "No arrivals detected";
+  for (int i = 0; i < arrCount; i++)
+    txt += "ARR:" + arrivals[i].flight + "|" + String(arrivals[i].alt) + " ft|" + String(arrivals[i].dist,1) + " nm\n";
+  for (int i = 0; i < depCount; i++)
+    txt += "DEP:" + departures[i].flight + "|" + String(departures[i].alt) + " ft|" + String(departures[i].dist,1) + " nm\n";
+  
+  if (arrCount == 0 && depCount == 0) txt += "No traffic detected";
   setPreview(txt);
 }
 
@@ -263,72 +423,138 @@ void modeMap() {
   c_lat = lat; c_lon = lon; c_range = range_km;
   xSemaphoreGive(configMutex);
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat,4) + "/lon/" + String(c_lon,4) + "/dist/" + String(c_range * 0.54f, 1);
-  HTTPClient http; http.setTimeout(8000); http.begin(api);
+  Serial.printf("ADSB.fi Map fetch: %s\n", api.c_str());
+  WiFiClientSecure client; client.setInsecure();
+  HTTPClient http; http.setTimeout(10000); http.begin(client, api);
+  http.setUserAgent("Mozilla/5.0");
   int code = http.GET();
-  if (code != 200) { drawText("MAP ERR " + String(code)); http.end(); return; }
-  String body = http.getString(); http.end();
+  Serial.printf("ADSB.fi Map status: %d\n", code);
+    if (code != 200) { drawText("MAP ERR " + String(code)); http.end(); return; }
+  
   adsbOk = true; lastSuccess = millis();
-  JsonDocument doc;
-  if (deserializeJson(doc, body)) { drawText("MAP PARSE ERR"); return; }
-  JsonArray ac = doc["ac"].as<JsonArray>();
-  inferAirport(ac);
-  tftClear();
-  const int cx = 160, cy = 130, maxR = 100;
-  tft.drawCircle(cx, cy, maxR,     TFT_DARKGREY);
-  tft.drawCircle(cx, cy, maxR / 2, TFT_DARKGREY);
-  tft.drawCircle(cx, cy, 3,        TFT_WHITE);
-  tft.drawFastHLine(cx - maxR, cy, maxR * 2, TFT_DARKGREY);
-  tft.drawFastVLine(cx, cy - maxR, maxR * 2, TFT_DARKGREY);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setTextSize(1);
-  tft.setCursor(4, 2); tft.printf("RADAR  %dkm range", c_range);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.setCursor(cx + maxR + 4, cy - 4); tft.printf("%dkm", c_range);
-  tft.setCursor(cx + maxR/2 - 8, cy + 4); tft.printf("%d", c_range/2);
-  float rangeNm = c_range * 0.54f;
-  int plotCount = 0;
+  String bestInfFlight = ""; int bestInfRate = 0; float bestInfLat = 0, bestInfLon = 0;
   String txt = "RADAR MAP\n";
-  for (JsonObject a : ac) {
-    if (plotCount >= 15) break;
-    if (!a["alt_baro"].is<int>()) continue;
-    if (a["alt_baro"].as<int>() <= 0) continue;
-    float d     = a["dst"]    | 9999.0f;
-    float acLat = a["lat"]    | 0.0f;
-    float acLon = a["lon"]    | 0.0f;
-    String fl   = a["flight"] | "?"; fl.trim();
-    if (d > rangeNm || acLat == 0) continue;
-    float dx = (acLon - c_lon) * cos(radians(c_lat));
-    float dy = (acLat - c_lat);
-    float maxDeg = c_range / 111.0f;
-    if (maxDeg == 0) continue;
-    int px = constrain(cx + (int)((dx / maxDeg) * maxR), 10, 310);
-    int py = constrain(cy - (int)((dy / maxDeg) * maxR), 20, 230);
-    tft.fillCircle(px, py, 3, TFT_GREEN);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    tft.setCursor(px + 5, py - 3); tft.print(fl);
-    float bearingRad = atan2((acLon - c_lon) * cos(radians(c_lat)), acLat - c_lat);
-    int bearing = ((int)(degrees(bearingRad) + 360)) % 360;
-    txt += fl + " " + String(d,1) + "nm " + String(bearing) + "\xC2\xB0\n";
-    plotCount++;
+  
+  {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, http.getStream());
+    http.end(); // Close connection
+    if (err) { 
+      Serial.printf("MAP PARSE ERR: %s\n", err.c_str());
+      drawText("MAP PARSE ERR"); return; 
+    }
+    JsonArray ac = doc["ac"].as<JsonArray>();
+    int total = ac.size();
+    int airCount = 0, groundCount = 0;
+    for (JsonObject a : ac) {
+      if (a["alt_baro"].as<String>() == "ground") groundCount++;
+      else airCount++;
+    }
+    Serial.printf("MAP ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
+
+    tftClear();
+    const int cx = 160, cy = 130, maxR = 100;
+    tft.drawCircle(cx, cy, maxR,     TFT_DARKCYAN);
+    tft.drawCircle(cx, cy, maxR / 2, TFT_DARKCYAN);
+    tft.drawCircle(cx, cy, 3,        TFT_WHITE);
+    tft.drawFastHLine(cx - maxR, cy, maxR * 2, TFT_DARKCYAN);
+    tft.drawFastVLine(cx, cy - maxR, maxR * 2, TFT_DARKCYAN);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setTextSize(1);
+    tft.setCursor(4, 2); tft.printf("RADAR  %dkm range", c_range);
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.setCursor(cx + maxR + 4, cy - 4); tft.printf("%dkm", c_range);
+    tft.setCursor(cx + maxR/2 - 8, cy + 4); tft.printf("%d", c_range/2);
+    float rangeNm = c_range * 0.54f;
+    int plotCount = 0;
+    float best_alt = 99999;
+
+    for (JsonObject a : ac) {
+      if (plotCount >= 15) break;
+      if (!a["alt_baro"].is<int>()) continue;
+      int alt = a["alt_baro"].as<int>();
+      if (alt <= 0) continue;
+      float d     = a["dst"]    | 9999.0f;
+      float acLat = a["lat"]    | 0.0f;
+      float acLon = a["lon"]    | 0.0f;
+      String fl   = a["flight"] | ""; fl.trim();
+      if (fl.length() == 0) {
+        fl = a["r"].as<String>();
+        if (fl == "undefined" || fl.length() == 0) fl = a["hex"].as<String>();
+        if (fl == "undefined" || fl.length() == 0) fl = "?";
+      }
+      String type = a["t"]      | "";
+      if (d > rangeNm || acLat == 0) continue;
+
+      if (alt < best_alt && alt < 5000) {
+        best_alt = alt;
+        bestInfFlight = fl;
+        bestInfLat = acLat;
+        bestInfLon = acLon;
+        bestInfRate = a["baro_rate"] | 0;
+      }
+
+      float dx = (acLon - c_lon) * cos(radians(c_lat));
+      float dy = (acLat - c_lat);
+      float maxDeg = c_range / 111.0f;
+      if (maxDeg == 0) continue;
+      int px = constrain(cx + (int)((dx / maxDeg) * maxR), 10, 310);
+      int py = constrain(cy - (int)((dy / maxDeg) * maxR), 20, 230);
+      
+      float track = a["track"] | -1.0f;
+      if (track >= 0) {
+        float trad = (track - 90) * PI / 180.0;
+        int x2 = px + cos(trad) * 10;
+        int y2 = py + sin(trad) * 10;
+        tft.drawLine(px, py, x2, y2, TFT_CYAN);
+        tft.fillCircle(px, py, 2, TFT_CYAN);
+      } else {
+        tft.fillCircle(px, py, 3, TFT_CYAN);
+      }
+      
+      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+      tft.setCursor(px + 5, py - 3); tft.print(fl);
+      if (type.length()) { tft.setCursor(px + 5, py + 5); tft.print(type); }
+      Serial.printf("Plotted AC: %s at %d,%d (dist %.1fnm)\n", fl.c_str(), px, py, d);
+      float bearingRad = atan2(dx, dy);
+      int bearing = ((int)(degrees(bearingRad) + 360)) % 360;
+      txt += fl + " (" + type + ") " + String(d,1) + "nm B" + String(bearing) + " T" + String((int)track) + "\n";
+      plotCount++;
+    }
+  } // doc destroyed here
+
+  if (bestInfFlight.length() > 2) {
+    fetchAirportInference(bestInfFlight, bestInfRate, bestInfLat, bestInfLon);
   }
-  if (inferred_apt_lat != 0) {
-    float apt_d = haversine(c_lat, c_lon, inferred_apt_lat, inferred_apt_lon) / 1.852f;
-    if (apt_d <= rangeNm) {
+  
+  if (inferred_apt_lat != 0 && inferred_apt_code != "---") {
+    float apt_d_km = haversine(c_lat, c_lon, inferred_apt_lat, inferred_apt_lon);
+    float apt_d_nm = apt_d_km / 1.852f;
+    if (apt_d_km <= (float)c_range) {
       float apt_dx = (inferred_apt_lon - c_lon) * cos(radians(c_lat));
       float apt_dy = (inferred_apt_lat - c_lat);
-      float maxDeg = c_range / 111.0f;
+      float maxDeg = (float)c_range / 111.0f;
       if (maxDeg > 0) {
-        int apx = constrain(cx + (int)((apt_dx / maxDeg) * maxR), 10, 310);
-        int apy = constrain(cy - (int)((apt_dy / maxDeg) * maxR), 20, 230);
+        const int cx = 160, cy = 130, maxR = 100;
+        int apx = cx + (int)((apt_dx / maxDeg) * maxR);
+        int apy = cy - (int)((apt_dy / maxDeg) * maxR);
+        // Constrain to slightly within radar circles for visibility
+        apx = constrain(apx, cx - maxR, cx + maxR);
+        apy = constrain(apy, cy - maxR, cy + maxR);
+
         tft.fillCircle(apx, apy, 4, TFT_RED);
         tft.setTextColor(TFT_RED, TFT_BLACK);
         tft.setCursor(apx + 5, apy - 4); tft.print(inferred_apt_code);
-        float bearingRad = atan2((inferred_apt_lon - c_lon) * cos(radians(c_lat)), inferred_apt_lat - c_lat);
-        int bearing = ((int)(degrees(bearingRad) + 360)) % 360;
-        txt += "[APT] " + inferred_apt_code + " " + String(apt_d, 1) + "nm " + String(bearing) + "\xC2\xB0\n";
+        float apt_bearingRad = atan2(apt_dx, apt_dy);
+        int apt_bearing = ((int)(degrees(apt_bearingRad) + 360)) % 360;
+        txt += "[APT] " + inferred_apt_code + " " + String(apt_d_nm, 1) + "nm B" + String(apt_bearing) + " T0\n";
+        Serial.printf("Plotted Airport: %s at %d,%d (dist %.1fkm)\n", inferred_apt_code.c_str(), apx, apy, apt_d_km);
       }
+    } else {
+      Serial.printf("Airport %s too far: %.1fkm (range %dkm)\n", inferred_apt_code.c_str(), apt_d_km, c_range);
     }
   }
-  if (plotCount == 0) txt += "No aircraft in range";
+  if (txt == "RADAR MAP\n") txt += "No aircraft in range";
+  Serial.println("MAP Preview: " + txt);
   setPreview(txt);
 }
 
@@ -339,13 +565,15 @@ void modeWeather() {
   c_lat = lat; c_lon = lon;
   xSemaphoreGive(configMutex);
   String url = "https://api.open-meteo.com/v1/forecast?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=temperature_2m,relative_humidity_2m,uv_index,precipitation_probability,wind_speed_10m";
+  Serial.printf("Weather fetch: %s\n", url.c_str());
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(8000); http.begin(client, url);
   float temp = 0; int humidity = 0, uv = 0, rain = 0; float wind = 0;
-  if (http.GET() == 200) {
-    String body = http.getString();
+  int wCode = http.GET();
+  Serial.printf("Weather status: %d\n", wCode);
+  if (wCode == 200) {
     JsonDocument doc;
-    if (!deserializeJson(doc, body)) {
+    if (!deserializeJson(doc, http.getStream())) {
       JsonObject c = doc["current"].as<JsonObject>();
       temp     = c["temperature_2m"]            | 0.0f;
       humidity = c["relative_humidity_2m"]      | 0;
@@ -357,13 +585,16 @@ void modeWeather() {
   }
   http.end();
   int aqi = -1;
-  WiFiClientSecure client2; client2.setInsecure();
   HTTPClient http2; http2.setTimeout(5000);
-  http2.begin(client2, "https://air-quality-api.open-meteo.com/v1/air-quality?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=us_aqi");
-  if (http2.GET() == 200) {
-    String body2 = http2.getString();
+  String aqUrl = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=us_aqi";
+  Serial.printf("AQI fetch: %s\n", aqUrl.c_str());
+  WiFiClientSecure client2; client2.setInsecure();
+  http2.begin(client2, aqUrl);
+  int aqCode = http2.GET();
+  Serial.printf("AQI status: %d\n", aqCode);
+  if (aqCode == 200) {
     JsonDocument doc2;
-    if (!deserializeJson(doc2, body2)) {
+    if (!deserializeJson(doc2, http2.getStream())) {
       aqi = doc2["current"]["us_aqi"] | -1;
     }
   }
@@ -454,7 +685,8 @@ void modeSystem() {
 }
 
 void updateMode() {
-  if (savePending) return;
+  if (savePending) { Serial.println("updateMode: skip, save pending"); return; }
+  Serial.printf("updateMode: starting mode %d\n", mode);
   updating = true;
   int c_mode;
   xSemaphoreTake(configMutex, portMAX_DELAY);
@@ -467,7 +699,8 @@ void updateMode() {
     case 4: modeWeather(); break;
     case 5: modeClock();   break;
     case 6: modeSystem();  break;
-    default: drawText("UNKNOWN MODE " + String(c_mode));
+    default: Serial.printf("updateMode: unknown mode %d\n", c_mode);
   }
   updating = false;
+  Serial.println("updateMode: finished");
 }

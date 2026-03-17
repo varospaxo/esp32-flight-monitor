@@ -60,7 +60,8 @@ void setup() {
   xSemaphoreTake(configMutex, portMAX_DELAY);
   bPin = btnPin;
   xSemaphoreGive(configMutex);
-  if (bPin >= 0) pinMode(bPin, INPUT_PULLUP);
+  if (bPin >= 0 && bPin <= 39) pinMode(bPin, INPUT_PULLUP);
+  else Serial.printf("Invalid btnPin: %d, skipping pinMode\n", bPin);
 
   drawText("BOOTING...");
 
@@ -83,6 +84,7 @@ void loop() {
   unsigned long interval = (c_mode == 5) ? 1000UL : 10000UL;
 
   if (millis() - lastUpdate > interval) {
+    Serial.printf("Loop: trigger refresh for mode %d\n", c_mode);
     updateMode();
     lastUpdate = millis();
   }
