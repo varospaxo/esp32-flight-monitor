@@ -1,0 +1,27 @@
+# PlatformIO
+.pio
+.pioenvs
+.piolibdeps
+libdeps
+targz
+
+# Build artifacts
+bin/
+gen/
+dist/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Configuration files (SENSITIVE)
+data/cfg.json
+data/config.json
+src/cfg.json
+src/config.json
+
+# OS files
+.DS_Store
+Thumbs.db

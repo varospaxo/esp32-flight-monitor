@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 Radar — Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+  <div class="brand">
+    <span class="logo">◉</span> ESP32 Radar
+  </div>
+  <div class="status-bar">
+    <span id="conn" class="badge badge-ok">●</span>
+    <span id="ip-badge" class="badge">--</span>
+    <span id="rssi-badge" class="badge">-- dBm</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Mode Selector -->
+  <section class="card">
+    <h3>Mode</h3>
+    <div class="mode-grid">
+      <button class="mode-btn" data-m="1" id="mb1">✈ Flight Radar</button>
+      <button class="mode-btn" data-m="2" id="mb2">🛬 Airport</button>
+      <button class="mode-btn" data-m="3" id="mb3">🗺 Map</button>
+      <button class="mode-btn" data-m="4" id="mb4">🌤 Weather</button>
+      <button class="mode-btn" data-m="5" id="mb5">⏰ Clock</button>
+      <button class="mode-btn" data-m="6" id="mb6">⚙ System</button>
+    </div>
+  </section>
+
+  <!-- Display Preview -->
+  <section class="card">
+    <div class="preview-header">
+      <h3>Display Preview <span id="upd-ind" class="badge badge-upd" style="display:none">⟳ Updating…</span></h3>
+      <button id="preview-toggle" class="btn btn-sm" onclick="togglePreview()">📄 Text View</button>
+    </div>
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="tft" width="320" height="240"></canvas>
+    </div>
+    <div class="text-wrap" id="text-wrap" style="display:none">
+      <pre id="preview-text">Waiting for data...</pre>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="card">
+    <div class="preview-header">
+      <h3 style="margin:0;">Settings</h3>
+      <button class="btn btn-sm" onclick="autoLocate()">📍 Auto-Locate</button>
+    </div>
+    <div class="form-grid" style="margin-top: 15px;">
+      <label>Latitude</label>
+      <input type="number" id="lat" step="0.0001" placeholder="19.076">
+
+      <label>Longitude</label>
+      <input type="number" id="lon" step="0.0001" placeholder="72.877">
+
+      <label>Range (km)</label>
+      <input type="number" id="range" min="1" max="500" placeholder="10">
+
+      <label>Timezone</label>
+      <input type="text" id="timezone" placeholder="Asia/Kolkata" data-offset="19800">
+    </div>
+    <button id="save-cfg" class="btn btn-primary" onclick="saveConfig()">Save Settings</button>
+  </section>
+
+  <!-- Dashboard Credentials -->
+  <section class="card">
+    <h3>Dashboard Credentials</h3>
+    <div class="form-grid">
+      <label>Username</label>
+      <input type="text" id="dash-user" placeholder="admin">
+
+      <label>Password</label>
+      <input type="password" id="dash-pass" placeholder="New Password">
+    </div>
+    <button class="btn btn-primary" onclick="saveCredentials()">Update Login</button>
+  </section>
+
+  <!-- WiFi -->
+  <section class="card">
+    <h3>WiFi Configuration</h3>
+    <div class="form-grid">
+      <label>SSID</label>
+      <input type="text" id="wifi-ssid" placeholder="Network name">
+
+      <label>Password</label>
+      <input type="password" id="wifi-pass" placeholder="Password">
+    </div>
+    <button class="btn btn-warn" onclick="saveWifi()">Save & Reboot</button>
+  </section>
+
+  <!-- System Info -->
+  <section class="card card-sm">
+    <h3>System</h3>
+    <div class="sys-grid">
+      <span>Heap</span><span id="heap">--</span>
+      <span>SSID</span><span id="ssid">--</span>
+      <span>Channel</span><span id="ch">--</span>
+      <span>ADSB API</span><span id="adsb-st">--</span>
+      <span>Weather API</span><span id="wx-st">--</span>
+      <span>Uptime</span><span id="uptime">--</span>
+    </div>
+    <div class="sys-links">
+      <a href="/update" class="btn btn-sm">OTA Update</a>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
