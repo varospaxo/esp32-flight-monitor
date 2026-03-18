@@ -1,0 +1,16 @@
+{
+  "wifi_ssid": "WIFI_SSID",
+  "wifi_pass": "WIFI_PASSWORD",
+  "mode": 1,
+  "dash_user": "admin",
+  "dash_pass": "admin",
+  "lat": 0.0000,
+  "lon": 0.0000,
+  "range_km": 10,
+  "units": 0,
+  "f_ground": true,
+  "f_glider": true,
+  "btn_pin": 0,
+  "timezone": "Asia/Kolkata",
+  "tzOffset": 19800
+}

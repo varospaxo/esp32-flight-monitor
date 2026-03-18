@@ -32,7 +32,7 @@ function clear() {
 
 function header(text, color) {
   ctx.fillStyle = color;
-  ctx.fillRect(0, 0, W, 20);
+  ctx.fillRect(0, 0, W, 22);
   ctx.fillStyle = C.BLACK;
   ctx.font = 'bold 12px monospace';
   ctx.textBaseline = 'middle';
@@ -334,9 +334,11 @@ function renderWeather(lines) {
     } else if (l.startsWith('Temperature')) color = '#ff8c42';
     else if (l.startsWith('Humidity'))     color = '#5bc8f5';
     else if (l.startsWith('UV'))           color = C.YELLOW;
-    else if (l.startsWith('Rain'))         color = '#82cfff';
+    else if (l.startsWith('Precipitation')) color = '#82cfff';
+    else if (l.startsWith('Wind'))         color = '#82cfff';
+    else if (l.startsWith('Visibility'))   color = '#ffffff';
 
-    text(4, y, l, color, 1); y += 17;
+    text(4, y, l, color, 1); y += 16;
   }
 }
 
@@ -405,6 +407,13 @@ function togglePreview() {
     previewMode = 'text';
     cvWrap.style.display = 'none';
     txWrap.style.display = 'block';
+    btn.textContent = '🎨 Canvas View';
+    // redraw text view immediately
+    if (lastData && lastData.preview) updateLiveView(lastData.preview);
+  } else {
+    previewMode = 'canvas';
+    cvWrap.style.display = 'block';
+    txWrap.style.display = 'none';
     btn.textContent = '📄 Text View';
     // redraw canvas immediately when switching back
     if (lastData && lastData.preview) renderPreview(lastData);
@@ -412,6 +421,8 @@ function togglePreview() {
 }
 
 function updateLiveView(preview) {
+  const pt = document.getElementById('preview-text');
+  if (pt) pt.textContent = preview || '(no data)';
   const lv = document.getElementById('live-text');
   if (lv) lv.textContent = preview || '(no data)';
 }
@@ -475,6 +486,8 @@ async function updateStatus() {
     const hrs = Math.floor(mins / 60);
     document.getElementById('uptime').textContent =
       hrs > 0 ? hrs + 'h ' + (mins % 60) + 'm' : mins + 'm';
+    
+    if (document.getElementById('sys-ip')) document.getElementById('sys-ip').textContent = j.ip;
 
     document.getElementById('conn').textContent = '●';
     document.getElementById('conn').className = 'badge badge-ok';

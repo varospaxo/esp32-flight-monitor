@@ -564,22 +564,27 @@ void modeWeather() {
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon;
   xSemaphoreGive(configMutex);
-  String url = "https://api.open-meteo.com/v1/forecast?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=temperature_2m,relative_humidity_2m,uv_index,precipitation_probability,wind_speed_10m";
+  String url = "https://api.open-meteo.com/v1/forecast?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=temperature_2m,relative_humidity_2m,uv_index,precipitation,wind_speed_10m,wind_direction_10m,visibility";
   Serial.printf("Weather fetch: %s\n", url.c_str());
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(8000); http.begin(client, url);
-  float temp = 0; int humidity = 0, uv = 0, rain = 0; float wind = 0;
+  float temp = 0, rain = 0; int humidity = 0, uv = 0; float wind = 0, windDir = 0; int visibility = 0;
   int wCode = http.GET();
   Serial.printf("Weather status: %d\n", wCode);
   if (wCode == 200) {
+    String payload = http.getString();
+    Serial.println("Weather JSON: " + payload);
     JsonDocument doc;
-    if (!deserializeJson(doc, http.getStream())) {
+    DeserializationError err = deserializeJson(doc, payload);
+    if (!err) {
       JsonObject c = doc["current"].as<JsonObject>();
-      temp     = c["temperature_2m"]            | 0.0f;
-      humidity = c["relative_humidity_2m"]      | 0;
-      uv       = c["uv_index"]                  | 0;
-      rain     = c["precipitation_probability"] | 0;
-      wind     = c["wind_speed_10m"]          | 0.0f;
+      temp     = c["temperature_2m"].as<float>();
+      humidity = c["relative_humidity_2m"].as<int>();
+      uv       = c["uv_index"].as<float>();
+      rain     = c["precipitation"].as<float>();
+      wind     = c["wind_speed_10m"].as<float>();
+      windDir  = c["wind_direction_10m"].as<float>();
+      visibility = c["visibility"].as<float>();
       weatherOk = true; lastSuccess = millis();
     }
   }
@@ -593,30 +598,39 @@ void modeWeather() {
   int aqCode = http2.GET();
   Serial.printf("AQI status: %d\n", aqCode);
   if (aqCode == 200) {
+    String payload = http2.getString();
+    Serial.println("AQI JSON: " + payload);
     JsonDocument doc2;
-    if (!deserializeJson(doc2, http2.getStream())) {
-      aqi = doc2["current"]["us_aqi"] | -1;
+    DeserializationError err2 = deserializeJson(doc2, payload);
+    if (!err2) {
+      if (doc2["current"]["us_aqi"].isNull()) aqi = -1;
+      else aqi = doc2["current"]["us_aqi"].as<int>();
     }
   }
   http2.end();
   tftClear(); tftHeader(" WEATHER", 0x07E0);
   int y = 30; tft.setTextSize(1); tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Temperature  %.1f C", temp);    y+=16;
-  tft.setCursor(4,y); tft.printf("Humidity     %d%%",  humidity);  y+=16;
-  tft.setCursor(4,y); tft.printf("Rain Prob    %d%%",  rain);      y+=16;
-  tft.setCursor(4,y); tft.printf("UV Index     %d",    uv);        y+=16;
-  tft.setCursor(4,y); tft.printf("Wind Speed   %.1f kph", wind); y+=16;
+  tft.setCursor(4,y); tft.printf("Temperature   %.1f C", temp);    y+=16;
+  tft.setCursor(4,y); tft.printf("Humidity      %d%%",  humidity);  y+=16;
+  tft.setCursor(4,y); tft.printf("Precipitation %.1f mm", rain);      y+=16;
+  tft.setCursor(4,y); tft.printf("UV Index      %d",    uv);        y+=16;
+  tft.setCursor(4,y); tft.printf("Wind Speed    %.1f kph", wind); y+=16;
+  tft.setCursor(4,y); tft.printf("Wind Dir      %d°", (int)windDir); y+=16;
+  tft.setCursor(4,y); tft.printf("Visibility    %d km", visibility / 1000); y+=16;
   if (aqi >= 0) {
     uint16_t aqiColor = aqi > 150 ? TFT_RED : aqi > 100 ? TFT_ORANGE : aqi > 50 ? TFT_YELLOW : TFT_GREEN;
     tft.setTextColor(aqiColor, TFT_BLACK);
-    tft.setCursor(4,y); tft.printf("AQI          %d (%s)", aqi, aqiLabel(aqi).c_str());
+    tft.setCursor(4,y); tft.printf("AQI           %d (%s)", aqi, aqiLabel(aqi).c_str());
   }
   String txt = "WEATHER\n";
-  txt += "Temperature  " + String(temp,1) + " C\n";
-  txt += "Humidity     " + String(humidity) + "%\n";
-  txt += "Rain Prob    " + String(rain) + "%\n";
-  txt += "UV Index     " + String(uv) + "\n";
-  if (aqi >= 0) txt += "AQI          " + String(aqi) + " (" + aqiLabel(aqi) + ")";
+  txt += "Temperature   " + String(temp,1) + " C\n";
+  txt += "Humidity      " + String(humidity) + "%\n";
+  txt += "Precipitation " + String(rain, 1) + " mm\n";
+  txt += "UV Index      " + String(uv) + "\n";
+  txt += "Wind Speed    " + String(wind,1) + " kph\n";
+  txt += "Wind Dir      " + String((int)windDir) + "°\n";
+  txt += "Visibility    " + String(visibility / 1000) + " km\n";
+  if (aqi >= 0) txt += "AQI           " + String(aqi) + " (" + aqiLabel(aqi) + ")";
   setPreview(txt);
 }
 
@@ -677,6 +691,7 @@ void modeSystem() {
   txt += "SSID: " + WiFi.SSID() + "\n";
   txt += "Signal: " + String(rssi) + " dBm\n";
   txt += "Ch: " + String(WiFi.channel()) + "\n";
+  txt += "IP: " + WiFi.localIP().toString() + "\n";
   txt += "ADSB API: "    + String(snap_adsb ? "OK" : "FAIL") + "\n";
   txt += "Weather API: " + String(snap_wx   ? "OK" : "FAIL") + "\n";
   txt += "Last update: " + String(ago) + "s ago\n";
