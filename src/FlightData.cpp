@@ -56,11 +56,11 @@ void inferAirport(JsonArray ac) {
 bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLon) {
   if (flight.length() < 3) return false;
   if (ESP.getFreeHeap() < 60000) {
-    Serial.printf("fetchAirportInference: skip, low heap %u\n", ESP.getFreeHeap());
+    Log.printf("fetchAirportInference: skip, low heap %u\n", ESP.getFreeHeap());
     return false;
   }
 
-  Serial.printf("Inferring airport from flight: %s\n", flight.c_str());
+  Log.printf("Inferring airport from flight: %s\n", flight.c_str());
   
   // Clear previous state
   inferred_apt_code = "---";
@@ -78,7 +78,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
   http.begin(client, url);
   http.setUserAgent("Mozilla/5.0");
   int code = http.GET();
-  Serial.printf("ADS-B DB Status: %d\n", code);
+  Log.printf("ADS-B DB Status: %d\n", code);
   
   bool success = false;
   if (code == 200) {
@@ -117,7 +117,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
           // Sanity check: if airport is > 500km away, it's likely a stale/wrong DB entry for the callsign
           float d_km = haversine(lat, lon, inferred_apt_lat, inferred_apt_lon);
           if (d_km > 500.0f) {
-            Serial.printf("Inference REJECTED: %s is %.1fkm away (> 500km)\n", inferred_apt_code.c_str(), d_km);
+            Log.printf("Inference REJECTED: %s is %.1fkm away (> 500km)\n", inferred_apt_code.c_str(), d_km);
             inferred_apt_code = "---";
             inferred_apt_name = "";
             inferred_apt_city = "";
@@ -126,17 +126,17 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
             inferred_apt_lon = 0;
             success = false;
           } else {
-            Serial.printf("Inferred: %s (%s) at %.4f, %.4f\n", 
+            Log.printf("Inferred: %s (%s) at %.4f, %.4f\n", 
               inferred_apt_code.c_str(), inferred_apt_name.c_str(), 
               inferred_apt_lat, inferred_apt_lon);
             success = true;
           }
         }
       } else {
-        Serial.println("No flightroute in response");
+        Log.println("No flightroute in response");
       }
     } else {
-      Serial.printf("JSON parse failed for ADS-B DB: %s\n", err.c_str());
+      Log.printf("JSON parse failed for ADS-B DB: %s\n", err.c_str());
     }
   }
   http.end();

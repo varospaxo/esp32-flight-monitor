@@ -4,7 +4,7 @@
 
 void startAP() {
   WiFi.softAP("ESP32-Radar");
-  Serial.println("AP: ESP32-Radar");
+  Log.println("AP: ESP32-Radar");
 }
 
 void connectWiFi() {
@@ -20,17 +20,17 @@ void connectWiFi() {
   }
   
   WiFi.begin(c_ssid.c_str(), c_pass.c_str());
-  Serial.print("Connecting");
+  Log.print("Connecting");
   int t = 20;
   while (WiFi.status() != WL_CONNECTED && t--) {
     delay(500);
-    Serial.print(".");
+    Log.print(".");
   }
-  Serial.println();
+  Log.println();
   
   if (WiFi.status() != WL_CONNECTED) {
     startAP();
   } else {
-    Serial.println("Connected: " + WiFi.localIP().toString());
+    Log.println("Connected: " + WiFi.localIP().toString());
   }
 }

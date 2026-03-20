@@ -21,7 +21,7 @@ void modeFlight() {
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat, 4)
              + "/lon/" + String(c_lon, 4)
              + "/dist/" + String(c_range * 0.54f, 1);
-  Serial.printf("ADSB.fi fetch: %s\n", api.c_str());
+  Log.printf("ADSB.fi fetch: %s\n", api.c_str());
 
   struct AcInfo { 
     String flight; int alt; float dist; float spd; String reg; float hdg; int vspd; String type; String cat; String country; 
@@ -35,7 +35,7 @@ void modeFlight() {
     HTTPClient http; http.setTimeout(10000); http.begin(client, api);
     http.setUserAgent("Mozilla/5.0");
     int code = http.GET();
-    Serial.printf("ADSB.fi status: %d\n", code);
+    Log.printf("ADSB.fi status: %d\n", code);
     if (code != 200) { drawText("FLIGHT ERR " + String(code)); http.end(); return; }
     
     adsbOk = true; lastSuccess = millis();
@@ -43,7 +43,7 @@ void modeFlight() {
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end();
     if (err) { 
-      Serial.printf("FLIGHT PARSE ERR: %s\n", err.c_str());
+      Log.printf("FLIGHT PARSE ERR: %s\n", err.c_str());
       drawText("FLIGHT PARSE ERR"); return; 
     }
     JsonArray ac = doc["ac"].as<JsonArray>();
@@ -53,7 +53,7 @@ void modeFlight() {
       if (a["alt_baro"].as<String>() == "ground") groundCount++;
       else airCount++;
     }
-    Serial.printf("ADSB flights found: %d (Air: %d, Ground: %d)\n", totalAcCount, airCount, groundCount);
+    Log.printf("ADSB flights found: %d (Air: %d, Ground: %d)\n", totalAcCount, airCount, groundCount);
     if (totalAcCount == 0) { drawText("NO AIRCRAFT\nIN RANGE"); return; }
 
     xSemaphoreTake(configMutex, portMAX_DELAY);
@@ -305,7 +305,7 @@ void modeAirport() {
   c_lat = lat; c_lon = lon; c_range = range_km;
   xSemaphoreGive(configMutex);
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat,4) + "/lon/" + String(c_lon,4) + "/dist/" + String(c_range * 0.54f, 1);
-  Serial.printf("ADSB.fi Airport fetch: %s\n", api.c_str());
+  Log.printf("ADSB.fi Airport fetch: %s\n", api.c_str());
   struct AcEntry { String flight; int alt; float dist; };
   AcEntry arrivals[5]; int arrCount = 0;
   AcEntry departures[5]; int depCount = 0;
@@ -316,7 +316,7 @@ void modeAirport() {
     HTTPClient http; http.setTimeout(8000); http.begin(client, api);
     http.setUserAgent("Mozilla/5.0");
     int code = http.GET();
-    Serial.printf("ADSB.fi Airport status: %d\n", code);
+    Log.printf("ADSB.fi Airport status: %d\n", code);
     if (code != 200) { drawText("AIRPORT ERR " + String(code)); http.end(); return; }
     
     adsbOk = true; lastSuccess = millis();
@@ -332,7 +332,7 @@ void modeAirport() {
       if (a["alt_baro"].as<String>() == "ground") groundCount++;
       else airCount++;
     }
-    Serial.printf("ADSB Airport ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
+    Log.printf("ADSB Airport ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
 
     float best_alt = 99999;
     for (JsonObject a : ac) {
@@ -423,12 +423,12 @@ void modeMap() {
   c_lat = lat; c_lon = lon; c_range = range_km;
   xSemaphoreGive(configMutex);
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat,4) + "/lon/" + String(c_lon,4) + "/dist/" + String(c_range * 0.54f, 1);
-  Serial.printf("ADSB.fi Map fetch: %s\n", api.c_str());
+  Log.printf("ADSB.fi Map fetch: %s\n", api.c_str());
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(10000); http.begin(client, api);
   http.setUserAgent("Mozilla/5.0");
   int code = http.GET();
-  Serial.printf("ADSB.fi Map status: %d\n", code);
+  Log.printf("ADSB.fi Map status: %d\n", code);
     if (code != 200) { drawText("MAP ERR " + String(code)); http.end(); return; }
   
   adsbOk = true; lastSuccess = millis();
@@ -440,7 +440,7 @@ void modeMap() {
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end(); // Close connection
     if (err) { 
-      Serial.printf("MAP PARSE ERR: %s\n", err.c_str());
+      Log.printf("MAP PARSE ERR: %s\n", err.c_str());
       drawText("MAP PARSE ERR"); return; 
     }
     JsonArray ac = doc["ac"].as<JsonArray>();
@@ -450,7 +450,7 @@ void modeMap() {
       if (a["alt_baro"].as<String>() == "ground") groundCount++;
       else airCount++;
     }
-    Serial.printf("MAP ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
+    Log.printf("MAP ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
 
     tftClear();
     const int cx = 160, cy = 130, maxR = 100;
@@ -514,7 +514,7 @@ void modeMap() {
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setCursor(px + 5, py - 3); tft.print(fl);
       if (type.length()) { tft.setCursor(px + 5, py + 5); tft.print(type); }
-      Serial.printf("Plotted AC: %s at %d,%d (dist %.1fnm)\n", fl.c_str(), px, py, d);
+      Log.printf("Plotted AC: %s at %d,%d (dist %.1fnm)\n", fl.c_str(), px, py, d);
       float bearingRad = atan2(dx, dy);
       int bearing = ((int)(degrees(bearingRad) + 360)) % 360;
       txt += fl + " (" + type + ") " + String(d,1) + "nm B" + String(bearing) + " T" + String((int)track) + "\n";
@@ -547,14 +547,14 @@ void modeMap() {
         float apt_bearingRad = atan2(apt_dx, apt_dy);
         int apt_bearing = ((int)(degrees(apt_bearingRad) + 360)) % 360;
         txt += "[APT] " + inferred_apt_code + " " + String(apt_d_nm, 1) + "nm B" + String(apt_bearing) + " T0\n";
-        Serial.printf("Plotted Airport: %s at %d,%d (dist %.1fkm)\n", inferred_apt_code.c_str(), apx, apy, apt_d_km);
+        Log.printf("Plotted Airport: %s at %d,%d (dist %.1fkm)\n", inferred_apt_code.c_str(), apx, apy, apt_d_km);
       }
     } else {
-      Serial.printf("Airport %s too far: %.1fkm (range %dkm)\n", inferred_apt_code.c_str(), apt_d_km, c_range);
+      Log.printf("Airport %s too far: %.1fkm (range %dkm)\n", inferred_apt_code.c_str(), apt_d_km, c_range);
     }
   }
   if (txt == "RADAR MAP\n") txt += "No aircraft in range";
-  Serial.println("MAP Preview: " + txt);
+  Log.println("MAP Preview: " + txt);
   setPreview(txt);
 }
 
@@ -565,15 +565,15 @@ void modeWeather() {
   c_lat = lat; c_lon = lon;
   xSemaphoreGive(configMutex);
   String url = "https://api.open-meteo.com/v1/forecast?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=temperature_2m,relative_humidity_2m,uv_index,precipitation,wind_speed_10m,wind_direction_10m,visibility";
-  Serial.printf("Weather fetch: %s\n", url.c_str());
+  Log.printf("Weather fetch: %s\n", url.c_str());
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(8000); http.begin(client, url);
   float temp = 0, rain = 0; int humidity = 0, uv = 0; float wind = 0, windDir = 0; int visibility = 0;
   int wCode = http.GET();
-  Serial.printf("Weather status: %d\n", wCode);
+  Log.printf("Weather status: %d\n", wCode);
   if (wCode == 200) {
     String payload = http.getString();
-    Serial.println("Weather JSON: " + payload);
+    Log.println("Weather JSON: " + payload);
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, payload);
     if (!err) {
@@ -592,14 +592,14 @@ void modeWeather() {
   int aqi = -1;
   HTTPClient http2; http2.setTimeout(5000);
   String aqUrl = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude="  + String(c_lat,4) + "&longitude=" + String(c_lon,4) + "&current=us_aqi";
-  Serial.printf("AQI fetch: %s\n", aqUrl.c_str());
+  Log.printf("AQI fetch: %s\n", aqUrl.c_str());
   WiFiClientSecure client2; client2.setInsecure();
   http2.begin(client2, aqUrl);
   int aqCode = http2.GET();
-  Serial.printf("AQI status: %d\n", aqCode);
+  Log.printf("AQI status: %d\n", aqCode);
   if (aqCode == 200) {
     String payload = http2.getString();
-    Serial.println("AQI JSON: " + payload);
+    Log.println("AQI JSON: " + payload);
     JsonDocument doc2;
     DeserializationError err2 = deserializeJson(doc2, payload);
     if (!err2) {
@@ -700,8 +700,8 @@ void modeSystem() {
 }
 
 void updateMode() {
-  if (savePending) { Serial.println("updateMode: skip, save pending"); return; }
-  Serial.printf("updateMode: starting mode %d\n", mode);
+  if (savePending) { Log.println("updateMode: skip, save pending"); return; }
+  Log.printf("updateMode: starting mode %d\n", mode);
   updating = true;
   int c_mode;
   xSemaphoreTake(configMutex, portMAX_DELAY);
@@ -714,8 +714,8 @@ void updateMode() {
     case 4: modeWeather(); break;
     case 5: modeClock();   break;
     case 6: modeSystem();  break;
-    default: Serial.printf("updateMode: unknown mode %d\n", c_mode);
+    default: Log.printf("updateMode: unknown mode %d\n", c_mode);
   }
   updating = false;
-  Serial.println("updateMode: finished");
+  Log.println("updateMode: finished");
 }

@@ -22,7 +22,7 @@ bool readJson(const char* path, JsonDocument& doc) {
   if (!f) return false;
   DeserializationError err = deserializeJson(doc, f);
   f.close();
-  if (err) { Serial.printf("readJson: parse err in %s: %s\n", path, err.c_str()); return false; }
+  if (err) { Log.printf("readJson: parse err in %s: %s\n", path, err.c_str()); return false; }
   return true;
 }
 
@@ -45,24 +45,24 @@ bool saveConfig() {
   const char* dstPath = "/cfg.json";
 
   File f = LittleFS.open(tmpPath, "w");
-  if (!f) { Serial.println("saveConfig: cannot open tmp file"); return false; }
+  if (!f) { Log.println("saveConfig: cannot open tmp file"); return false; }
   size_t written = serializeJson(doc, f);
   f.close();
 
   if (written == 0) {
-    Serial.println("saveConfig: 0 bytes written");
+    Log.println("saveConfig: 0 bytes written");
     LittleFS.remove(tmpPath);
     return false;
   }
 
   LittleFS.remove(dstPath);
   if (!LittleFS.rename(tmpPath, dstPath)) {
-    Serial.println("saveConfig: rename failed");
+    Log.println("saveConfig: rename failed");
     LittleFS.remove(tmpPath);
     return false;
   }
 
-  Serial.printf("saveConfig OK: %u bytes  mode=%d\n", written, mode);
+  Log.printf("saveConfig OK: %u bytes  mode=%d\n", written, mode);
   return true;
 }
 
@@ -72,7 +72,7 @@ void loadConfig() {
   if (!ok) ok = readJson("/config.json", doc);  // fall back to seed
 
   if (!ok) {
-    Serial.println("loadConfig: no config file found, using defaults");
+    Log.println("loadConfig: no config file found, using defaults");
     return;
   }
 
@@ -93,5 +93,5 @@ void loadConfig() {
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
   xSemaphoreGive(configMutex);
 
-  Serial.printf("loadConfig: ssid=%s mode=%d\n", ssid.c_str(), mode);
+  Log.printf("loadConfig: ssid=%s mode=%d\n", ssid.c_str(), mode);
 }

@@ -11,7 +11,7 @@ AsyncWebServer server(80);
 bool checkAuth(AsyncWebServerRequest* req) {
   String u, p;
   if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
-    Serial.println("checkAuth: mutex timeout!");
+    Log.println("checkAuth: mutex timeout!");
     req->send(503, "text/plain", "busy");
     return false;
   }
@@ -70,7 +70,7 @@ void setupServer() {
     mode = m;
     saveConfig();
     xSemaphoreGive(configMutex);
-    Serial.printf("/api/mode -> mode=%d\n", m);
+    Log.printf("/api/mode -> mode=%d\n", m);
     req->send(200, "application/json", "{\"mode\":" + String(m) + "}");
   });
 
@@ -157,5 +157,5 @@ void setupServer() {
 
   ElegantOTA.begin(&server);
   server.begin();
-  Serial.println("Web server started");
+  Log.println("Web server started");
 }

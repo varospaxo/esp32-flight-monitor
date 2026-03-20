@@ -36,7 +36,7 @@ void setup() {
   configMutex  = xSemaphoreCreateMutex();
   previewMutex = xSemaphoreCreateMutex();
 
-  if (!LittleFS.begin(true)) Serial.println("LittleFS mount failed");
+  if (!LittleFS.begin(true)) Log.println("LittleFS mount failed");
 
   loadConfig();
   connectWiFi();
@@ -61,11 +61,12 @@ void setup() {
   bPin = btnPin;
   xSemaphoreGive(configMutex);
   if (bPin >= 0 && bPin <= 39) pinMode(bPin, INPUT_PULLUP);
-  else Serial.printf("Invalid btnPin: %d, skipping pinMode\n", bPin);
+  else Log.printf("Invalid btnPin: %d, skipping pinMode\n", bPin);
 
   drawText("BOOTING...");
 
   setupServer();
+  Log.startServer();
 
   String ipStr = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "AP: 192.168.4.1";
   drawText("READY\nIP " + ipStr + "\nMode " + String(mode));
@@ -75,6 +76,7 @@ void setup() {
 
 void loop() {
   ElegantOTA.loop();
+  Log.handleClient();
 
   int c_mode;
   xSemaphoreTake(configMutex, portMAX_DELAY);
@@ -84,7 +86,7 @@ void loop() {
   unsigned long interval = (c_mode == 5) ? 1000UL : 10000UL;
 
   if (millis() - lastUpdate > interval) {
-    Serial.printf("Loop: trigger refresh for mode %d\n", c_mode);
+    Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
     updateMode();
     lastUpdate = millis();
   }

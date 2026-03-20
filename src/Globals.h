@@ -2,12 +2,16 @@
 #define GLOBALS_H
 
 #include <Arduino.h>
+#include "TelnetLog.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
 // ─── Mutexes ──────────────────────────────────────────────────────────────────
 extern SemaphoreHandle_t configMutex;
 extern SemaphoreHandle_t previewMutex;
+
+// ─── Logger ───────────────────────────────────────────────────────────────────
+extern TelnetLogger Log;
 
 // ─── Runtime flags ────────────────────────────────────────────────────────────
 extern volatile bool adsbOk;
