@@ -9,18 +9,18 @@ let lastData = {};
 
 // Colour palette matching TFT_eSPI defines (RGB→hex)
 const C = {
-  BLACK:     '#000000',
-  WHITE:     '#ffffff',
-  CYAN:      '#00ffff',
-  YELLOW:    '#ffff00',
-  GREEN:     '#00ff00',
-  RED:       '#f80000',
-  ORANGE:    '#ffa500',
-  MAGENTA:   '#fc00fc',
-  BLUE:      '#0000ff',
-  DARKGREY:  '#404040',
+  BLACK: '#000000',
+  WHITE: '#ffffff',
+  CYAN: '#00ffff',
+  YELLOW: '#ffff00',
+  GREEN: '#00ff00',
+  RED: '#f80000',
+  ORANGE: '#ffa500',
+  MAGENTA: '#fc00fc',
+  BLUE: '#0000ff',
+  DARKGREY: '#404040',
   LIGHTGREY: '#c0c0c0',
-  NAVY:      '#000080',
+  NAVY: '#000080',
 };
 
 // ─── Base Drawing Helpers ────────────────────────────────────────────────────
@@ -84,10 +84,10 @@ function loadLogo(icao) {
   if (logoCache[icao]) return logoCache[icao];
   const entry = { img: new Image(), ok: false };
   entry.img.crossOrigin = 'anonymous';
-  entry.img.onload  = () => { entry.ok = true; };
+  entry.img.onload = () => { entry.ok = true; };
   entry.img.onerror = () => { entry.ok = false; entry.img = null; };
-  entry.img.src = 'https://content.airhex.com/content/logos/airlines_'
-                + icao + '_200_200_s.png';
+  entry.img.src = 'https://images.flightradar24.com/assets/airlines/logotypes/'
+    + icao + '_logo0.png';
   logoCache[icao] = entry;
   return entry;
 }
@@ -98,34 +98,34 @@ function renderFlight(rawLines) {
   // rawLines[0] = "FLIGHT RADAR"
   // rawLines[1] = "Callsign|Route|1/1|Alt|VS|Spd|Reg|Type|Coords|Hdg|Airline|OrigFull|OrigCountry|DestFull|DestCountry"
   clear();
-  
-  if (rawLines.length < 2) { 
+
+  if (rawLines.length < 2) {
     header(' FLIGHT RADAR', C.CYAN);
-    textCenter(80, 'NO DATA', C.DARKGREY, 1); 
-    return; 
+    textCenter(80, 'NO DATA', C.DARKGREY, 1);
+    return;
   }
   const lines = rawLines[1].split('|');
-  if (lines.length < 2) { 
+  if (lines.length < 2) {
     header(' FLIGHT RADAR', C.CYAN);
-    textCenter(80, 'NO DATA', C.DARKGREY, 1); 
-    return; 
+    textCenter(80, 'NO DATA', C.DARKGREY, 1);
+    return;
   }
 
   const callsign = lines[0] || '---';
-  const route    = (lines[1] || '').replace('-', ' > ');
-  const index    = lines[2] || '1/1';
-  const alt      = lines[3] || '';
-  const vspd     = lines[4] || '';
-  const spd      = lines[5] || '';
-  const dist     = lines[6] || '';
-  const reg      = lines[7] || '';
-  const type     = lines[8] || '';
-  const coords   = lines[9] || '';
-  const hdg      = lines[10] || '';
-  const airline  = lines[11] || '';
-  const oFull    = lines[12] || '';
+  const route = (lines[1] || '').replace('-', ' > ');
+  const index = lines[2] || '1/1';
+  const alt = lines[3] || '';
+  const vspd = lines[4] || '';
+  const spd = lines[5] || '';
+  const dist = lines[6] || '';
+  const reg = lines[7] || '';
+  const type = lines[8] || '';
+  const coords = lines[9] || '';
+  const hdg = lines[10] || '';
+  const airline = lines[11] || '';
+  const oFull = lines[12] || '';
   const oCountry = lines[13] || '';
-  const dFull    = lines[14] || '';
+  const dFull = lines[14] || '';
   const dCountry = lines[15] || '';
 
   // Header Bar (matching TFT)
@@ -168,7 +168,15 @@ function renderFlight(rawLines) {
     if (logo.ok && logo.img) {
       ctx.strokeStyle = C.DARKGREY;
       ctx.strokeRect(259, 39, 52, 52);
-      ctx.drawImage(logo.img, 260, 40, 50, 50);
+      let dw = 50, dh = 50;
+      const nw = logo.img.naturalWidth || logo.img.width || 1;
+      const nh = logo.img.naturalHeight || logo.img.height || 1;
+      const aspect = nw / nh;
+      if (aspect > 1) dh = 50 / aspect;
+      else dw = 50 * aspect;
+      const dx = 260 + (50 - dw) / 2;
+      const dy = 40 + (50 - dh) / 2;
+      ctx.drawImage(logo.img, dx, dy, dw, dh);
     }
   }
   y += 24;
@@ -216,12 +224,12 @@ function renderAirport(lines) {
     text(4, y, 'No arrivals detected', C.YELLOW, 1);
     return;
   }
-  
+
   let hasArr = false, hasDep = false;
   for (let i = 3; i < lines.length && y < H - 14; i++) {
     let l = lines[i];
     if (!l) continue;
-    
+
     if (l.startsWith('ARR:') && !hasArr) {
       text(4, y, 'ARRIVALS', C.CYAN, 1); y += 12; hasArr = true;
       l = l.substring(4);
@@ -276,7 +284,7 @@ function renderRadar(lines, rangeKm) {
     const isApt = line.startsWith('[APT] ');
     if (isApt) line = line.substring(6).trim();
     console.log(`Radar Line: ${line} (Apt: ${isApt})`);
-    
+
     const nmMatch = line.match(/(\d+\.?\d*)nm/);
     if (!nmMatch) continue;
     const nm = parseFloat(nmMatch[1]);
@@ -286,7 +294,7 @@ function renderRadar(lines, rangeKm) {
     // Heading:  T{track}
     const bMatch = line.match(/ B(\d+)/);
     const tMatch = line.match(/ T(\d+)/);
-    
+
     // Bearing for position (0 is North)
     const bearing = bMatch ? parseFloat(bMatch[1]) : (i * 60);
     const bRad = (bearing - 90) * Math.PI / 180;
@@ -301,16 +309,16 @@ function renderRadar(lines, rangeKm) {
     } else {
       ctx.fillStyle = C.CYAN;
       if (tMatch) {
-         const track = parseFloat(tMatch[1]);
-         const tRad = (track - 90) * Math.PI / 180;
-         ctx.strokeStyle = C.CYAN;
-         ctx.beginPath();
-         ctx.moveTo(px, py);
-         ctx.lineTo(px + Math.cos(tRad) * 10, py + Math.sin(tRad) * 10);
-         ctx.stroke();
-         dot(px, py, 2, C.CYAN);
+        const track = parseFloat(tMatch[1]);
+        const tRad = (track - 90) * Math.PI / 180;
+        ctx.strokeStyle = C.CYAN;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(tRad) * 10, py + Math.sin(tRad) * 10);
+        ctx.stroke();
+        dot(px, py, 2, C.CYAN);
       } else {
-         dot(px, py, 3, C.CYAN);
+        dot(px, py, 3, C.CYAN);
       }
       ctx.fillStyle = C.YELLOW; ctx.font = '7px monospace'; ctx.textAlign = 'left';
       ctx.fillText(line.split(' ')[0], px + 5, py - 4);
@@ -332,11 +340,11 @@ function renderWeather(lines) {
       const v = parseInt(l.match(/\d+/)?.[0] || '0');
       color = v <= 50 ? C.GREEN : v <= 100 ? C.YELLOW : v <= 150 ? C.ORANGE : C.RED;
     } else if (l.startsWith('Temperature')) color = '#ff8c42';
-    else if (l.startsWith('Humidity'))     color = '#5bc8f5';
-    else if (l.startsWith('UV'))           color = C.YELLOW;
+    else if (l.startsWith('Humidity')) color = '#5bc8f5';
+    else if (l.startsWith('UV')) color = C.YELLOW;
     else if (l.startsWith('Precipitation')) color = '#82cfff';
-    else if (l.startsWith('Wind'))         color = '#82cfff';
-    else if (l.startsWith('Visibility'))   color = '#ffffff';
+    else if (l.startsWith('Wind')) color = '#82cfff';
+    else if (l.startsWith('Visibility')) color = '#ffffff';
 
     text(4, y, l, color, 1); y += 16;
   }
@@ -349,7 +357,7 @@ function renderClock(lines) {
   // lines[1] = HH:MM:SS, lines[2] = date, lines[3] = timezone
   const timeStr = lines[1] || '--:--:--';
   const dateStr = lines[2] || '';
-  const tzStr   = lines[3] || '';
+  const tzStr = lines[3] || '';
 
   // Large time — size 4 ~ 32px bold monospace, centered at y=65
   ctx.font = 'bold 32px monospace';
@@ -378,10 +386,10 @@ function renderSystem(lines) {
     if (!lines[i]) continue;
     const l = lines[i];
     let color = C.WHITE;
-    if (l.includes(': OK'))   color = C.GREEN;
+    if (l.includes(': OK')) color = C.GREEN;
     else if (l.includes(': FAIL')) color = C.RED;
     else if (l.startsWith('Signal') || l.startsWith('RSSI')) color = C.CYAN;
-    else if (l.startsWith('Ch:'))   color = C.YELLOW;
+    else if (l.startsWith('Ch:')) color = C.YELLOW;
     else if (l.startsWith('SSID:') || l.startsWith('Heap:') || l.startsWith('Last')) color = C.LIGHTGREY;
     text(4, y, l, color, 1); y += 13;
   }
@@ -400,7 +408,7 @@ function renderLoading() {
 // ─── Preview Toggle ─────────────────────────────────────────────────────
 let previewMode = 'canvas'; // 'canvas' | 'text'
 function togglePreview() {
-  const btn    = document.getElementById('preview-toggle');
+  const btn = document.getElementById('preview-toggle');
   const cvWrap = document.getElementById('canvas-wrap');
   const txWrap = document.getElementById('text-wrap');
   if (previewMode === 'canvas') {
@@ -486,7 +494,7 @@ async function updateStatus() {
     const hrs = Math.floor(mins / 60);
     document.getElementById('uptime').textContent =
       hrs > 0 ? hrs + 'h ' + (mins % 60) + 'm' : mins + 'm';
-    
+
     if (document.getElementById('sys-ip')) document.getElementById('sys-ip').textContent = j.ip;
 
     document.getElementById('conn').textContent = '●';
@@ -531,7 +539,7 @@ async function loadConfig() {
     document.getElementById('timezone').value = c.timezone || 'Asia/Kolkata';
     document.getElementById('timezone').dataset.offset = c.tzOffset || 19800;
     document.getElementById('wifi-ssid').value = c.wifi_ssid || '';
-    
+
     if (document.getElementById('units')) document.getElementById('units').value = c.units || 0;
     if (document.getElementById('f-ground')) document.getElementById('f-ground').checked = c.f_ground || false;
     if (document.getElementById('f-glider')) document.getElementById('f-glider').checked = c.f_glider || false;
@@ -547,15 +555,15 @@ async function loadConfig() {
 // ─── Save Config ──────────────────────────────────────────────────────────────
 async function saveConfig() {
   const params = new URLSearchParams({
-    lat:      document.getElementById('lat').value,
-    lon:      document.getElementById('lon').value,
-    range:    document.getElementById('range').value,
+    lat: document.getElementById('lat').value,
+    lon: document.getElementById('lon').value,
+    range: document.getElementById('range').value,
     timezone: document.getElementById('timezone').value,
     tzOffset: document.getElementById('timezone').dataset.offset || 19800,
-    units:    document.getElementById('units').value,
+    units: document.getElementById('units').value,
     f_ground: document.getElementById('f-ground').checked,
     f_glider: document.getElementById('f-glider').checked,
-    btn_pin:  document.getElementById('btn-pin').value
+    btn_pin: document.getElementById('btn-pin').value
   });
   try {
     const r = await fetch('/api/config/save', {
@@ -565,13 +573,13 @@ async function saveConfig() {
     });
     const saved = await r.json();
     // Reload form fields from what the ESP actually stored
-    document.getElementById('lat').value      = saved.lat;
-    document.getElementById('lon').value      = saved.lon;
-    document.getElementById('range').value    = saved.range;
+    document.getElementById('lat').value = saved.lat;
+    document.getElementById('lon').value = saved.lon;
+    document.getElementById('range').value = saved.range;
     document.getElementById('timezone').value = saved.timezone || '';
     if (saved.tzOffset) document.getElementById('timezone').dataset.offset = saved.tzOffset;
 
-    if (saved.units !== undefined)  document.getElementById('units').value = saved.units;
+    if (saved.units !== undefined) document.getElementById('units').value = saved.units;
     if (saved.f_ground !== undefined) document.getElementById('f-ground').checked = saved.f_ground;
     if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;
     if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;

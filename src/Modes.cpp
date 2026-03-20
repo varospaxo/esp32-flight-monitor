@@ -219,10 +219,12 @@ void modeFlight() {
   if (icao_al.length() == 3 && ESP.getFreeHeap() > 60000) {
     WiFiClientSecure clientLogo; clientLogo.setInsecure();
     HTTPClient httpLogo; httpLogo.setTimeout(5000);
-    String logoUrl = "https://content.airhex.com/content/logos/airlines_" + icao_al + "_200_200_s.jpg";
+    String logoUrl = "https://images.weserv.nl/?url=images.flightradar24.com/assets/airlines/logotypes/" + icao_al + "_logo0.png&output=jpg&w=200&h=200&fit=contain&bg=black";
     httpLogo.begin(clientLogo, logoUrl);
     httpLogo.setUserAgent("Mozilla/5.0");
-    if (httpLogo.GET() == 200) {
+    int logoCode = httpLogo.GET();
+    Log.printf("Logo fetch status: %d\n", logoCode);
+    if (logoCode == 200) {
       int lx = 260, ly = 40, lsize = 50;
       tft.drawRect(lx-1, ly-1, lsize+2, lsize+2, TFT_DARKGREY);
       String payload = httpLogo.getString();

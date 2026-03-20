@@ -44,7 +44,8 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 ### Source APIs
 - [ADSB.fi](https://adsb.fi/) – Real-time flight data.
 - [ADSB DB](https://adsbdb.com/) – Aircraft and flight route information.
-- [AirHex](https://airhex.com/) – Airline logos.
+- [FlightRadar24](https://www.flightradar24.com/) – Airline logos.
+- [weserv.nl](https://images.weserv.nl/) – Image conversion proxy for ESP32 logo decoding.
 - [Open-Meteo](https://open-meteo.com/) – Weather and Air Quality Index data.
 - [rzeldent/esp32-flightradar24-ttgo](https://github.com/rzeldent/esp32-flightradar24-ttgo) – Inspiration for the UI layout and features.
 
