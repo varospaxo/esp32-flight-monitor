@@ -664,20 +664,59 @@ void modeWeather() {
 void modeClock() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) { drawText("NTP SYNC..."); return; }
-  String c_timezone;
+  String c_timezone, c_tzAbbr;
+  long c_offset;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_timezone = timezone;
+  c_offset = tzOffset;
+  c_tzAbbr = tzAbbr;
   xSemaphoreGive(configMutex);
-  tftClear(); tftHeader(" CLOCK", TFT_MAGENTA);
+
   char timeBuf[9], dateBuf[20];
   strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S",    &timeinfo);
   strftime(dateBuf, sizeof(dateBuf), "%a, %d %b %Y",&timeinfo);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_CYAN,     TFT_NAVY); tft.setTextSize(4); tft.drawString(timeBuf,           160, 85);
-  tft.setTextColor(TFT_WHITE,    TFT_NAVY); tft.setTextSize(2); tft.drawString(dateBuf,           160,135);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setTextSize(1); tft.drawString(c_timezone.c_str(),160,165);
+
+  Log.printf("Current time: %s\n", timeBuf);
+
+  int h = abs(c_offset) / 3600;
+  int m = (abs(c_offset) % 3600) / 60;
+  char gmtStr[16];
+  snprintf(gmtStr, sizeof(gmtStr), "GMT%s%02d:%02d", (c_offset >= 0 ? "+" : "-"), h, m);
+  String fullTz = String(gmtStr);
+  if (c_tzAbbr.length() > 0) {
+      String upperAbbr = c_tzAbbr;
+      upperAbbr.toUpperCase();
+      if (!upperAbbr.startsWith("GMT+") && !upperAbbr.startsWith("GMT-") && 
+          !upperAbbr.startsWith("UTC+") && !upperAbbr.startsWith("UTC-")) {
+          fullTz += " (" + c_tzAbbr + ")";
+      }
+  }
+
+  tftClear();
+  tft.fillRect(0, 0, 320, 22, TFT_CYAN);
+  tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.setTextSize(1);
   tft.setTextDatum(TL_DATUM);
-  setPreview("CLOCK\n" + String(timeBuf) + "\n" + String(dateBuf) + "\n" + c_timezone);
+  tft.drawString("CLOCK", 4, 7);
+
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK); 
+  tft.setTextSize(6);
+  tft.drawString(timeBuf, 160, 80);
+
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
+  tft.setTextSize(3);
+  tft.drawString(dateBuf, 160, 140);
+
+  tft.setTextColor(TFT_WHITE, TFT_BLACK); 
+  tft.setTextSize(2);
+  tft.drawString(fullTz, 160, 180);
+
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
+  tft.setTextSize(2);
+  tft.drawString(c_timezone, 160, 210);
+
+  tft.setTextDatum(TL_DATUM);
+  setPreview("CLOCK\n" + String(timeBuf) + "\n" + String(dateBuf) + "\n" + fullTz + "\n" + c_timezone);
 }
 void modeSystem() {
   tftClear(); tftHeader(" SYSTEM MONITOR", TFT_BLUE);

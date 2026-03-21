@@ -50,6 +50,7 @@ void setupServer() {
     doc["mode"]       = mode;
     doc["range_km"]   = range_km;
     doc["timezone"]   = timezone;
+    doc["tzAbbr"]     = tzAbbr;
     doc["lat"]        = lat;
     doc["lon"]        = lon;
     xSemaphoreGive(configMutex);
@@ -78,6 +79,7 @@ void setupServer() {
     doc["mode"]     = mode;
     doc["timezone"] = timezone;
     doc["tzOffset"] = tzOffset;
+    doc["tzAbbr"]   = tzAbbr;
     doc["units"]    = units;
     doc["f_ground"] = filterGround;
     doc["f_glider"] = filterGliders;
@@ -94,6 +96,7 @@ void setupServer() {
     bool hasRange  = req->hasParam("range", true);
     bool hasTz     = req->hasParam("timezone", true);
     bool hasOffset = req->hasParam("tzOffset", true);
+    bool hasAbbr   = req->hasParam("tzAbbr", true);
     xSemaphoreTake(configMutex, portMAX_DELAY);
     if (hasLat) lat = strtof(req->getParam("lat", true)->value().c_str(), nullptr);
     if (hasLon) lon = strtof(req->getParam("lon", true)->value().c_str(), nullptr);
@@ -104,19 +107,24 @@ void setupServer() {
     if (hasRange)  range_km = req->getParam("range", true)->value().toInt();
     if (hasTz)     timezone = req->getParam("timezone", true)->value();
     if (hasOffset) tzOffset = req->getParam("tzOffset", true)->value().toInt();
+    if (hasAbbr)   tzAbbr = req->getParam("tzAbbr", true)->value();
     if (req->hasParam("units", true))    units = req->getParam("units", true)->value().toInt();
     if (req->hasParam("f_ground", true)) filterGround = req->getParam("f_ground", true)->value() == "true";
     if (req->hasParam("f_glider", true)) filterGliders = req->getParam("f_glider", true)->value() == "true";
     if (req->hasParam("btn_pin", true))  btnPin = req->getParam("btn_pin", true)->value().toInt();
+    
     configTime(tzOffset, 0, "pool.ntp.org", "time.nist.gov");
+    setenv("TZ", "", 1);
+    tzset();
+    
     bool ok = saveConfig();
-    float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset;
+    float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset; String r_abbr = tzAbbr;
     int r_units = units; bool r_f_ground = filterGround, r_f_glider = filterGliders; int r_btn_pin = btnPin;
     xSemaphoreGive(configMutex);
     savePending = false;
     if (!ok) { req->send(500, "application/json", "{\"error\":\"Failed to write config\"}"); return; }
     JsonDocument doc;
-    doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off;
+    doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off; doc["tzAbbr"] = r_abbr;
     doc["units"] = r_units; doc["f_ground"] = r_f_ground; doc["f_glider"] = r_f_glider; doc["btn_pin"] = r_btn_pin;
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);

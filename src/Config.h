@@ -14,6 +14,7 @@ extern bool filterGliders;
 extern int btnPin;        // GPIO pin for mode button
 extern String timezone;
 extern long tzOffset;
+extern String tzAbbr;
 extern String dashUser;
 extern String dashPass;
 void loadConfig();

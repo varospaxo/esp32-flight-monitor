@@ -343,23 +343,30 @@ function renderWeather(lines) {
 }
 function renderClock(lines) {
   clear();
-  header(' CLOCK', C.MAGENTA);
-  // lines[1] = HH:MM:SS, lines[2] = date, lines[3] = timezone
+  header(' CLOCK', C.CYAN);
+  // lines[1] = HH:MM:SS, lines[2] = date, lines[3] = fullTz, lines[4] = timezone
   const timeStr = lines[1] || '--:--:--';
   const dateStr = lines[2] || '';
-  const tzStr = lines[3] || '';
-  // Large time — size 4 ~ 32px bold monospace, centered at y=65
-  ctx.font = 'bold 32px monospace';
+  const fullTz  = lines[3] || '';
+  const tzStr   = lines[4] || '';
+
+  ctx.font = 'bold 48px monospace';
   ctx.fillStyle = C.CYAN;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'center';
-  ctx.fillText(timeStr, W / 2, 60);
-  ctx.font = 'bold 16px monospace';
+  ctx.fillText(timeStr, W / 2, 50);
+
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = C.YELLOW;
+  ctx.fillText(dateStr, W / 2, 115);
+
+  ctx.font = '16px monospace';
   ctx.fillStyle = C.WHITE;
-  ctx.fillText(dateStr, W / 2, 108);
-  ctx.font = '10px monospace';
-  ctx.fillStyle = C.DARKGREY;
-  ctx.fillText(tzStr, W / 2, 135);
+  ctx.fillText(fullTz, W / 2, 165);
+
+  ctx.font = '14px monospace';
+  ctx.fillStyle = C.LIGHTGREY;
+  ctx.fillText(tzStr, W / 2, 195);
   ctx.textAlign = 'left';
 }
 function renderSystem(lines) {
@@ -516,12 +523,41 @@ async function loadConfig() {
 }
 // ─── Save Config ──────────────────────────────────────────────────────────────
 async function saveConfig() {
+  const tzVal = document.getElementById('timezone').value.trim();
+  let tzOff = parseInt(document.getElementById('timezone').dataset.offset || '19800', 10);
+  let tzAbbr = document.getElementById('timezone').dataset.abbr || 'IST';
+  try {
+    const d = new Date();
+    const tzFormat = new Intl.DateTimeFormat('en-US', { timeZone: tzVal, hour12: false, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
+    const utcFormat = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', hour12: false, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
+    
+    const parseDate = (fmt) => {
+        const parts = fmt.formatToParts(d);
+        const p = {};
+        parts.forEach(part => p[part.type] = part.value);
+        return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    };
+    
+    tzOff = Math.round((parseDate(tzFormat) - parseDate(utcFormat)) / 1000);
+    
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: tzVal });
+    const parts = formatter.formatToParts();
+    const part = parts.find(p => p.type === 'timeZoneName');
+    if (part) tzAbbr = part.value;
+
+    document.getElementById('timezone').dataset.offset = tzOff;
+    document.getElementById('timezone').dataset.abbr = tzAbbr;
+  } catch(e) { 
+    console.log("Invalid timezone string, using fallback. " + e);
+  }
+
   const params = new URLSearchParams({
     lat: document.getElementById('lat').value,
     lon: document.getElementById('lon').value,
     range: document.getElementById('range').value,
-    timezone: document.getElementById('timezone').value,
-    tzOffset: document.getElementById('timezone').dataset.offset || 19800,
+    timezone: tzVal,
+    tzOffset: tzOff,
+    tzAbbr: tzAbbr,
     units: document.getElementById('units').value,
     f_ground: document.getElementById('f-ground').checked,
     f_glider: document.getElementById('f-glider').checked,
@@ -540,6 +576,7 @@ async function saveConfig() {
     document.getElementById('range').value = saved.range;
     document.getElementById('timezone').value = saved.timezone || '';
     if (saved.tzOffset) document.getElementById('timezone').dataset.offset = saved.tzOffset;
+    if (saved.tzAbbr) document.getElementById('timezone').dataset.abbr = saved.tzAbbr;
     if (saved.units !== undefined) document.getElementById('units').value = saved.units;
     if (saved.f_ground !== undefined) document.getElementById('f-ground').checked = saved.f_ground;
     if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;

@@ -13,6 +13,7 @@ bool   filterGliders = false;
 int    btnPin   = 0; // Default to GPIO 0 (often BOOT button)
 String timezone = "Asia/Kolkata";
 long   tzOffset = 19800;
+String tzAbbr   = "IST";
 String dashUser = "admin";
 String dashPass = "admin";
 bool readJson(const char* path, JsonDocument& doc) {
@@ -37,8 +38,9 @@ bool saveConfig() {
   doc["btn_pin"]   = btnPin;
   doc["timezone"]  = timezone;
   doc["tzOffset"]  = tzOffset;
-  const char* tmpPath = "/cfg_tmp.json";
-  const char* dstPath = "/cfg.json";
+  doc["tzAbbr"]    = tzAbbr;
+  const char* tmpPath = "/config_tmp.json";
+  const char* dstPath = "/config.json";
   File f = LittleFS.open(tmpPath, "w");
   if (!f) { Log.println("saveConfig: cannot open tmp file"); return false; }
   size_t written = serializeJson(doc, f);
@@ -59,8 +61,7 @@ bool saveConfig() {
 }
 void loadConfig() {
   JsonDocument doc;
-  bool ok = readJson("/cfg.json", doc);
-  if (!ok) ok = readJson("/config.json", doc);  // fall back to seed
+  bool ok = readJson("/config.json", doc);
   if (!ok) {
     Log.println("loadConfig: no config file found, using defaults");
     return;
@@ -80,6 +81,7 @@ void loadConfig() {
   if (doc["btn_pin"].is<int>())           btnPin   = doc["btn_pin"].as<int>();
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
+  if (doc["tzAbbr"].is<const char*>())    tzAbbr = doc["tzAbbr"].as<String>();
   xSemaphoreGive(configMutex);
   Log.printf("loadConfig: ssid=%s mode=%d\n", ssid.c_str(), mode);
 }
