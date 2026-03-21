@@ -292,16 +292,19 @@ void modeFlight() {
 
         tft.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
         tft.setCursor(85, y);
-        tft.printf("%.0f%s", sAlt, uAlt);
-
-        tft.setTextSize(1);
-        tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        tft.setCursor(185, y + 6);
-        tft.printf("%.1f%s", sDist, snap_units==1?"KM":"NM");
+        tft.printf("%.0f", sAlt);
 
         tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.setCursor(240, y + 6);
-        tft.printf("%.0f%s %03d\xF8", sSpd, uSpd, (int)sHdg);
+        tft.setCursor(155, y);
+        tft.printf("%.0f", sSpd);
+
+        tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        tft.setCursor(205, y);
+        tft.printf("%03d", (int)sHdg);
+
+        tft.setTextColor(TFT_CYAN, TFT_BLACK);
+        tft.setCursor(255, y);
+        tft.printf("%.1f", sDist);
 
         y += 18;
         if (y > 230) break;
@@ -325,7 +328,7 @@ void modeFlight() {
     float sAlt = sorted[i].alt, sDist = sorted[i].dist, sSpd = sorted[i].spd, sHdg = sorted[i].hdg;
     if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; sSpd *= 1.852f; }
     char sbuf[128];
-    snprintf(sbuf, sizeof(sbuf), "SEC|%s|%.0f%s|%.1f%s|%.0f%s|%03d\xF8", sorted[i].flight.substring(0,6).c_str(), sAlt, uAlt, sDist, snap_units==1?"KM":"NM", sSpd, uSpd, (int)sHdg);
+    snprintf(sbuf, sizeof(sbuf), "SEC|%s|%.0f|%.0f|%03d|%.1f", sorted[i].flight.substring(0,6).c_str(), sAlt, sSpd, (int)sHdg, sDist);
     ptxt += "\n" + String(sbuf);
   }
   setPreview(ptxt);
@@ -486,8 +489,9 @@ void modeMap() {
     tft.drawCircle(cx, cy, 3,        TFT_WHITE);
     tft.drawFastHLine(cx - maxR, cy, maxR * 2, TFT_DARKCYAN);
     tft.drawFastVLine(cx, cy - maxR, maxR * 2, TFT_DARKCYAN);
-    tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setTextSize(1);
-    tft.setCursor(4, 2); tft.printf("RADAR  %dkm range", c_range);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setTextSize(2);
+    tft.setCursor(4, 2); tft.printf("RADAR  %dkm", c_range);
+    tft.setTextSize(1);
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
     tft.setCursor(cx + maxR + 4, cy - 4); tft.printf("%dkm", c_range);
     tft.setCursor(cx + maxR/2 - 8, cy + 4); tft.printf("%d", c_range/2);
@@ -533,9 +537,14 @@ void modeMap() {
       } else {
         tft.fillCircle(px, py, 3, TFT_CYAN);
       }
+      tft.setTextSize(2);
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-      tft.setCursor(px + 5, py - 3); tft.print(fl);
-      if (type.length()) { tft.setCursor(px + 5, py + 5); tft.print(type); }
+      tft.setCursor(px + 6, py - 8); tft.print(fl);
+      if (type.length()) { 
+        tft.setTextSize(1); 
+        tft.setCursor(px + 6, py + 8); 
+        tft.print(type); 
+      }
       Log.printf("Plotted AC: %s at %d,%d (dist %.1fnm)\n", fl.c_str(), px, py, d);
       float bearingRad = atan2(dx, dy);
       int bearing = ((int)(degrees(bearingRad) + 360)) % 360;
@@ -561,8 +570,9 @@ void modeMap() {
         apx = constrain(apx, cx - maxR, cx + maxR);
         apy = constrain(apy, cy - maxR, cy + maxR);
         tft.fillCircle(apx, apy, 4, TFT_RED);
+        tft.setTextSize(2);
         tft.setTextColor(TFT_RED, TFT_BLACK);
-        tft.setCursor(apx + 5, apy - 4); tft.print(inferred_apt_code);
+        tft.setCursor(apx + 6, apy - 8); tft.print(inferred_apt_code);
         float apt_bearingRad = atan2(apt_dx, apt_dy);
         int apt_bearing = ((int)(degrees(apt_bearingRad) + 360)) % 360;
         txt += "[APT] " + inferred_apt_code + " " + String(apt_d_nm, 1) + "nm B" + String(apt_bearing) + " T0\n";

@@ -144,6 +144,12 @@ void setupServer() {
     xSemaphoreGive(configMutex);
     req->send(ok ? 200 : 500, "text/plain", ok ? "ok" : "save failed");
   });
+  server.on("/api/reboot", HTTP_POST, [](AsyncWebServerRequest* req) {
+    if (!checkAuth(req)) return;
+    req->send(200, "text/plain", "rebooting");
+    delay(500);
+    ESP.restart();
+  });
   ElegantOTA.begin(&server);
   server.begin();
   Log.println("Web server started");

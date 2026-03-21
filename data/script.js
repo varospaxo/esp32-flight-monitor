@@ -188,8 +188,9 @@ function renderFlight(rawLines) {
         const p = rline.split('|');
         text(4, y, p[1], C.WHITE, 2);
         text(85, y, p[2], '#adff2f', 2);
-        text(185, y + 6, p[3], C.DARKGREY, 1);
-        text(240, y + 6, p[4] + ' ' + p[5].replace('\xF8', '°'), C.YELLOW, 1);
+        text(155, y, p[3], C.YELLOW, 2);
+        text(205, y, p[4], C.LIGHTGREY, 2);
+        text(255, y, p[5], C.CYAN, 2);
         y += 18;
       } else {
         text(4, y, rline, C.WHITE, 1);
@@ -257,10 +258,10 @@ function renderRadar(lines, rangeKm) {
   clear();
   // Header
   ctx.fillStyle = C.CYAN;
-  ctx.font = '8px monospace';
+  ctx.font = 'bold 16px monospace';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  ctx.fillText('RADAR  ' + (rangeKm || '?') + 'km range', 4, 2);
+  ctx.fillText('RADAR  ' + (rangeKm || '?') + 'km', 4, 1);
   const cx = 160, cy = 130, maxR = 100;
   // Range rings
   circle(cx, cy, maxR, C.DARKGREY);
@@ -298,8 +299,8 @@ function renderRadar(lines, rangeKm) {
     const py = Math.round(cy + r * Math.sin(bRad));
     if (isApt) {
       dot(px, py, 4, C.RED);
-      ctx.fillStyle = C.RED; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-      ctx.fillText(line.split(' ')[0] || 'APT', px + 5, py - 4);
+      ctx.fillStyle = C.RED; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'left';
+      ctx.fillText(line.split(' ')[0] || 'APT', px + 6, py - 6);
     } else {
       ctx.fillStyle = C.CYAN;
       if (tMatch) {
@@ -314,8 +315,8 @@ function renderRadar(lines, rangeKm) {
       } else {
         dot(px, py, 3, C.CYAN);
       }
-      ctx.fillStyle = C.YELLOW; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-      ctx.fillText(line.split(' ')[0], px + 5, py - 4);
+      ctx.fillStyle = C.YELLOW; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'left';
+      ctx.fillText(line.split(' ')[0], px + 6, py - 6);
     }
   }
 }
@@ -591,6 +592,15 @@ async function saveWifi() {
   const params = new URLSearchParams({ ssid, pass });
   await fetch('/api/wifi?' + params);
   toast('WiFi saved — rebooting...');
+}
+// ─── Reboot Device ────────────────────────────────────────────────────────────
+async function rebootDevice() {
+  if (!confirm("Are you sure you want to reboot the ESP32?")) return;
+  toast("Rebooting device...");
+  try {
+    await fetch("/api/reboot", { method: "POST" });
+  } catch(e) {}
+  setTimeout(() => location.reload(), 4000);
 }
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
