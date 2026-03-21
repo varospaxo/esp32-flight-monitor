@@ -719,6 +719,22 @@ void modeClock() {
   setPreview("CLOCK\n" + String(timeBuf) + "\n" + String(dateBuf) + "\n" + fullTz + "\n" + c_timezone);
 }
 void modeSystem() {
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClientSecure c; c.setInsecure();
+    HTTPClient h; h.setTimeout(4000);
+    h.begin(c, "https://opendata.adsb.fi/api/v3/lat/0/lon/0/dist/1");
+    int aCode = h.GET();
+    h.end();
+    adsbOk = (aCode == 200);
+
+    h.begin(c, "https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m");
+    int wCode = h.GET();
+    h.end();
+    weatherOk = (wCode == 200);
+
+    if (adsbOk || weatherOk) lastSuccess = millis();
+  }
+
   tftClear(); tftHeader(" SYSTEM MONITOR", TFT_BLUE);
   int y = 28; tft.setTextSize(2);
   int rssi = WiFi.RSSI();

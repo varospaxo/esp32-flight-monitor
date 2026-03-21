@@ -29,6 +29,9 @@ void setupServer() {
   server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->send(LittleFS, "/script.js", "application/javascript");
   });
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* req) {
+    req->send(204);
+  });
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     String previewSnap;

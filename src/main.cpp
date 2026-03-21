@@ -63,7 +63,7 @@ void loop() {
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_mode = mode;
   xSemaphoreGive(configMutex);
-  unsigned long interval = (c_mode == 5) ? 1000UL : 10000UL;
+  unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : 10000UL);
   if (millis() - lastUpdate > interval) {
     Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
     updateMode();
