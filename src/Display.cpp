@@ -1,19 +1,15 @@
 #include "Display.h"
 #include "Utils.h"
 #include <WiFi.h>
-
 TFT_eSPI tft = TFT_eSPI();
-
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
   if ( y >= tft.height() ) return 0;
   tft.pushImage(x, y, w, h, bitmap);
   return 1;
 }
-
 void tftClear() {
-  tft.fillScreen(TFT_BLACK);
+  tft.fillScreen(TFT_NAVY);
 }
-
 void tftHeader(const char* title, uint16_t color) {
   tft.fillRect(0, 0, 320, 22, color);
   tft.setTextColor(TFT_BLACK, color);
@@ -25,7 +21,6 @@ void tftHeader(const char* title, uint16_t color) {
   tft.drawString(ip, 316, 11);
   tft.setTextDatum(TL_DATUM);
 }
-
 void drawText(const String& s) {
   tftClear();
   tft.setCursor(0, 0);

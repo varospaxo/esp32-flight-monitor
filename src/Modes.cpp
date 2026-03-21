@@ -9,20 +9,16 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <time.h>
-
 void modeFlight() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
-
   float c_lat, c_lon; int c_range;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon; c_range = range_km;
   xSemaphoreGive(configMutex);
-
   String api = "https://opendata.adsb.fi/api/v3/lat/" + String(c_lat, 4)
              + "/lon/" + String(c_lon, 4)
              + "/dist/" + String(c_range * 0.54f, 1);
   Log.printf("ADSB.fi fetch: %s\n", api.c_str());
-
   struct AcInfo { 
     String flight; int alt; float dist; float spd; String reg; float hdg; int vspd; String type; String cat; String country; 
     float lat; float lon;
@@ -37,7 +33,6 @@ void modeFlight() {
     int code = http.GET();
     Log.printf("ADSB.fi status: %d\n", code);
     if (code != 200) { drawText("FLIGHT ERR " + String(code)); http.end(); return; }
-    
     adsbOk = true; lastSuccess = millis();
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, http.getStream());
@@ -55,18 +50,15 @@ void modeFlight() {
     }
     Log.printf("ADSB flights found: %d (Air: %d, Ground: %d)\n", totalAcCount, airCount, groundCount);
     if (totalAcCount == 0) { drawText("NO AIRCRAFT\nIN RANGE"); return; }
-
     xSemaphoreTake(configMutex, portMAX_DELAY);
     snap_fGround = filterGround; snap_fGlider = filterGliders;
     xSemaphoreGive(configMutex);
-
     for (JsonObject a : ac) {
       if (!a["alt_baro"].is<int>()) continue;
       int alt = a["alt_baro"].as<int>();
       if (snap_fGround && alt <= 0) continue;
       String catCode = a["category"] | "";
       if (snap_fGlider && (catCode == "A4" || catCode == "C0")) continue;
-
       float d    = a["dst"]    | 9999.0f;
       float spd  = a["gs"]     | 0.0f;
       float hdg  = a["track"]  | -1.0f;
@@ -77,7 +69,6 @@ void modeFlight() {
       String country = a["trc"] | ""; 
       float alat = a["lat"]    | 0.0f;
       float alon = a["lon"]    | 0.0f;
-
       for (int i = 0; i < 3; i++) {
         if (d < dists[i]) {
           for (int j = 2; j > i; j--) { dists[j] = dists[j-1]; sorted[j] = sorted[j-1]; }
@@ -89,8 +80,7 @@ void modeFlight() {
       }
     }
   } // doc destroyed here
-
-  String airline, route, acType, originName, destName, originCountry, destCountry, originIcao, destIcao, originCity, destCity;
+  String airline, route, acType, originName, destName, originCountry, destCountry, originIcao, destIcao, originCity, destCity, originIata, destIata;
   if (sorted[0].flight.length() > 2 && ESP.getFreeHeap() > 60000) {
     WiFiClientSecure client2; client2.setInsecure();
     HTTPClient http2; http2.setTimeout(5000);
@@ -104,7 +94,6 @@ void modeFlight() {
         if (!fr.isNull()) {
           JsonObject al = fr["airline"];
           if (!al.isNull()) airline = al["name"] | "";
-          
           JsonObject orig = fr["origin"];
           JsonObject dest = fr["destination"];
           if (!orig.isNull() && !dest.isNull()) {
@@ -112,14 +101,14 @@ void modeFlight() {
             originIcao = orig["icao_code"] | "";
             originCountry = orig["country_iso_name"] | "";
             originCity = orig["municipality"] | "";
-            
+            originIata = orig["iata_code"] | "";
             destName = dest["name"] | "";
             destIcao = dest["icao_code"] | "";
             destCountry = dest["country_iso_name"] | "";
             destCity = dest["municipality"] | "";
-
-            String oCode = orig["iata_code"] | originIcao;
-            String dCode = dest["iata_code"] | destIcao;
+            destIata = dest["iata_code"] | "";
+            String oCode = originIata.length() ? originIata : originIcao;
+            String dCode = destIata.length() ? destIata : destIcao;
             if (oCode.length() && dCode.length()) route = oCode + "-" + dCode;
           }
         }
@@ -134,81 +123,45 @@ void modeFlight() {
     }
     http2.end();
   }
-
   // Build clean city/name strings for display and preview
   String fullOrig = "";
   if (originName.length()) {
-    if (originCity.length()) fullOrig += originCity + ", ";
+    if (originCity.length() && originName.indexOf(originCity) == -1) fullOrig += originCity + ", ";
+    if (originIcao.length()) fullOrig += originIcao + " - ";
     fullOrig += originName;
-    if (originIcao.length()) fullOrig += " (" + originIcao + ")";
   }
-  
   String fullDest = "";
   if (destName.length()) {
-    if (destCity.length()) fullDest += destCity + ", ";
+    if (destCity.length() && destName.indexOf(destCity) == -1) fullDest += destCity + ", ";
+    if (destIcao.length()) fullDest += destIcao + " - ";
     fullDest += destName;
-    if (destIcao.length()) fullDest += " (" + destIcao + ")";
   }
-
   tftClear();
-  tft.fillRect(0, 0, 320, 22, TFT_CYAN);
-  tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.setTextSize(2);
-  tft.setCursor(4, 4); tft.print(sorted[0].flight + (route.length() ? " " + route : "")); 
-  tft.setTextSize(1); tft.setCursor(290, 8); tft.print(String(1) + "/" + String(totalAcCount)); 
-
+  tft.fillRect(0, 0, 320, 22, TFT_YELLOW);
+  tft.setTextColor(TFT_BLACK, TFT_YELLOW); tft.setTextSize(1);
+  tft.setCursor(4, 8); tft.print("OVERHEAD TRACKER"); 
+  tft.setCursor(290, 8); tft.print(String(1) + "/" + String(totalAcCount)); 
   int y = 26; 
-
   int snap_units;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   snap_units = units;
   xSemaphoreGive(configMutex);
-
   float dAlt = sorted[0].alt, dSpd = sorted[0].spd, dVSpd = sorted[0].vspd, dDist = sorted[0].dist;
-  const char* uAlt = "ft", *uSpd = "kts", *uVSpd = "fpm", *uDist = "nm";
+  const char* uAlt = "FT", *uSpd = "KT", *uVSpd = "FPM", *uDist = "NM";
   if (snap_units == 1) { // Metric
-    dAlt *= 0.3048f; uAlt = "m";
-    dSpd *= 1.852f;  uSpd = "km/h";
-    dVSpd *= 0.3048f; uVSpd = "m/m";
-    dDist *= 1.852f; uDist = "km";
+    dAlt *= 0.3048f; uAlt = "M";
+    dSpd *= 1.852f;  uSpd = "KM/H";
+    dVSpd *= 0.3048f; uVSpd = "M/M";
+    dDist *= 1.852f; uDist = "KM";
   }
-
-  // Row 1: Alt, V/S, Speed
-  tft.setTextSize(1);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4, y); tft.printf("%.0f%s", dAlt, uAlt);
-  
-  uint16_t vsColor = dVSpd > 100 ? TFT_GREEN : (dVSpd < -100 ? TFT_RED : TFT_WHITE);
-  tft.setTextColor(vsColor, TFT_BLACK);
-  tft.setCursor(100, y); tft.printf("%.0f%s", dVSpd, uVSpd);
-  
+  // Row 1: Callsign & Airline
+  tft.setTextSize(3);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setCursor(185, y); tft.printf("%.1f%s", dDist, uDist);
-
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(255, y); tft.printf("%.0f%s", dSpd, uSpd);
-  y += 14;
-
-  // Row 2: Reg, Model
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  String modelStr = acType;
-  if (modelStr.length() == 0) modelStr = sorted[0].type;
-  if (modelStr.length() == 0) modelStr = categoryName(sorted[0].cat);
-  String row2 = sorted[0].reg + "  " + modelStr;
-  tft.setCursor(4, y); tft.print(row2);
-  y += 14;
-
-  // Row 3: Coords, Hdg
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft.setCursor(4, y); tft.print(formatDMS(sorted[0].lat, true) + " " + formatDMS(sorted[0].lon, false));
-  if (sorted[0].hdg >= 0) {
-    tft.setCursor(240, y); tft.printf("%.0f\xC2\xB0", sorted[0].hdg);
-  }
-  y += 16;
-
-  // Row 4: Airline
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4, y); tft.print(airline);
-  
+  tft.setCursor(4, y); tft.print(sorted[0].flight);
+  y += 24;
+  tft.setTextSize(2);
+  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+  tft.setCursor(4, y); tft.print(airline.length() ? airline : "UNKNOWN");
   // Airline Logo
   String icao_al = "";
   for (int i = 0; i < (int)sorted[0].flight.length(); i++) {
@@ -225,57 +178,135 @@ void modeFlight() {
     int logoCode = httpLogo.GET();
     Log.printf("Logo fetch status: %d\n", logoCode);
     if (logoCode == 200) {
-      int lx = 260, ly = 40, lsize = 50;
-      tft.drawRect(lx-1, ly-1, lsize+2, lsize+2, TFT_DARKGREY);
+      int lx = 260, ly = 32, lsize = 50;
       String payload = httpLogo.getString();
       if (payload.length() > 0) {
         TJpgDec.setJpgScale(4);
         TJpgDec.drawJpg(lx, ly, (const uint8_t*)payload.c_str(), payload.length());
       }
-      payload = ""; // Explicitly free memory
+      payload = "";
     }
     httpLogo.end();
   }
-  y += 20;
-
-  // Bottom: Airport Names with Flags
-  auto drawAirport = [&](int curY, String name, String country) {
+  y += 18;
+  y = 86; // Prevent intersection with logo ending at y=84
+  tft.drawFastHLine(4, y, 250, TFT_CYAN); y += 4;
+  // Row 2: Type & Reg & Route
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(4, y); tft.print("AIRCRAFT TYPE");
+  tft.setCursor(110, y); tft.print("REGISTRATION");
+  tft.setCursor(200, y); tft.print("ROUTE");
+  y += 10;
+  String modelStr = acType;
+  if (modelStr.length() == 0) modelStr = sorted[0].type;
+  if (modelStr.length() == 0) modelStr = categoryName(sorted[0].cat);
+  String routeStr = "UNKNOWN";
+  String oCode = originIcao.length() ? originIcao : originIata;
+  String dCode = destIcao.length() ? destIcao : destIata;
+  if (oCode.length() && dCode.length()) routeStr = oCode + " > " + dCode;
+  tft.setTextSize(2);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.setCursor(4, y); tft.print(modelStr.substring(0, 8));
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setCursor(110, y); tft.print(sorted[0].reg.length() ? sorted[0].reg : "???");
+  tft.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
+  tft.setCursor(200, y); tft.print(routeStr.substring(0, 10));
+  y += 18;
+  tft.drawFastHLine(4, y, 312, TFT_CYAN); y += 4;
+  // Row 3: Airports
+  auto drawAirportLocal = [&](int curY, String name, String country) {
     if (name.length() == 0) return;
     int flagX = 4;
+    // Removed duplicate flag fetch here to keep it lean, it's drawn in the bottom section if we want,
+    // wait, we wanted flags in Row 3! I'll re-implement the flag draw exactly.
     if (country.length() == 2 && ESP.getFreeHeap() > 60000) {
       String flagUrl = "https://flagcdn.com/w40/" + country + ".jpg";
-      HTTPClient fhttp; WiFiClientSecure fclient; fclient.setInsecure();
-      fhttp.begin(fclient, flagUrl);
-      fhttp.setUserAgent("Mozilla/5.0");
-      if (fhttp.GET() == 200) {
-        String fpayload = fhttp.getString();
-        if (fpayload.length() > 0) {
+      HTTPClient fhtp; WiFiClientSecure fcli; fcli.setInsecure();
+      fhtp.begin(fcli, flagUrl);
+      int code = fhtp.GET();
+      if (code == 200) {
+        String pld = fhtp.getString();
+        if (pld.length() > 0) {
           TJpgDec.setJpgScale(1); 
-          TJpgDec.drawJpg(flagX, curY - 2, (const uint8_t*)fpayload.c_str(), fpayload.length());
+          TJpgDec.drawJpg(flagX, curY - 2, (const uint8_t*)pld.c_str(), pld.length());
         }
-        fpayload = ""; // Explicitly free memory
       }
-      fhttp.end();
+      fhtp.end();
     }
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.setTextSize(1);
     tft.setCursor(flagX + 24, curY);
-    tft.print(name);
+    tft.print(name.substring(0, 48));
   };
-
-  y = 110;
-  drawAirport(y, fullOrig, originCountry); y += 16;
-  drawAirport(y, fullDest, destCountry);     y += 20;
-
-  // Minimal list for others
-  tft.drawFastHLine(4, y, 312, TFT_DARKGREY); y += 6;
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  for (int i = 1; i < count; i++) {
-    float sAlt = sorted[i].alt, sDist = sorted[i].dist;
-    if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
-    tft.setCursor(4, y); tft.printf("%s %.0f%s %.1f%s", sorted[i].flight.c_str(), sAlt, uAlt, sDist, snap_units==1?"km":"nm");
-    y += 12;
+  if (fullOrig.length() || fullDest.length()) {
+    drawAirportLocal(y, fullOrig, originCountry); y += 14;
+    drawAirportLocal(y, fullDest, destCountry);   y += 14;
+  } else {
+    y += 28;
   }
+  // Row 4: Altitude, Speed, Distance
+  tft.drawFastHLine(4, y, 312, TFT_CYAN); y += 4;
+  String phase = "CRUISE";
+  uint16_t phaseColor = TFT_GREEN;
+  if (dAlt < 4000 && dVSpd < -250) { phase = "LANDING"; phaseColor = TFT_RED; }
+  else if (dAlt < 4000 && dVSpd > 250) { phase = "TAKEOFF"; phaseColor = TFT_ORANGE; }
+  else if (dVSpd > 250) { phase = "CLIMBING"; phaseColor = TFT_ORANGE; }
+  else if (dVSpd < -250) { phase = "DESCENT"; phaseColor = TFT_RED; }
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(4, y); tft.print("PHASE");
+  tft.setCursor(110, y); tft.print("ALTITUDE");
+  tft.setCursor(200, y); tft.print("SPEED");
+  tft.setCursor(260, y); tft.print("DIST");
+  y += 10;
+  tft.setTextSize(2);
+  tft.setTextColor(phaseColor, TFT_BLACK);
+  tft.setCursor(4, y); tft.print(phase);
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setCursor(110, y); tft.printf("%.0f %s", dAlt, uAlt);
+  tft.setCursor(200, y); tft.printf("%.0f %s", dSpd, uSpd);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.setCursor(260, y); tft.printf("%.1f %s", dDist, uDist);
+  y += 18;
+  uint16_t vsColor = dVSpd > 100 ? TFT_GREEN : (dVSpd < -100 ? TFT_RED : TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setTextColor(vsColor, TFT_BLACK);
+  tft.setCursor(4, y); tft.printf("%.0f %s", dVSpd, uVSpd);
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  if (sorted[0].hdg >= 0) {
+    tft.setCursor(110, y); tft.printf("HDG: %.0f\xC2\xB0", sorted[0].hdg);
+  }
+  y += 12;
+  // Bottom: Secondary Aircraft
+  tft.drawFastHLine(4, y, 312, TFT_DARKGREY); y += 4;
+  if (count > 1) {
+    for (int i = 1; i < count; i++) {
+        float sAlt = sorted[i].alt, sDist = sorted[i].dist, sSpd = sorted[i].spd, sHdg = sorted[i].hdg;
+        if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; sSpd *= 1.852f; }
 
+        tft.setTextSize(2);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.setCursor(4, y); 
+        tft.print(sorted[i].flight.substring(0,6));
+
+        tft.setTextColor(TFT_GREENYELLOW, TFT_BLACK);
+        tft.setCursor(85, y);
+        tft.printf("%.0f%s", sAlt, uAlt);
+
+        tft.setTextSize(1);
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        tft.setCursor(185, y + 6);
+        tft.printf("%.1f%s", sDist, snap_units==1?"KM":"NM");
+
+        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+        tft.setCursor(240, y + 6);
+        tft.printf("%.0f%s %03d\xF8", sSpd, uSpd, (int)sHdg);
+
+        y += 18;
+        if (y > 230) break;
+    }
+  }
   String ptxt = "FLIGHT RADAR\n" + sorted[0].flight;
   ptxt += "|" + route; 
   ptxt += "|" + String(1) + "/" + String(totalAcCount); // Index/Total
@@ -290,16 +321,15 @@ void modeFlight() {
   ptxt += "|" + airline;
   ptxt += "|" + fullOrig + "|" + originCountry;
   ptxt += "|" + fullDest + "|" + destCountry;
-  
-  // Secondary aircraft
   for (int i = 1; i < count; i++) {
-    float sAlt = sorted[i].alt, sDist = sorted[i].dist;
-    if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; }
-    ptxt += "\n" + sorted[i].flight + " " + String(sAlt, 0) + uAlt + " " + String(sDist, 1) + (snap_units==1?"km":"nm");
+    float sAlt = sorted[i].alt, sDist = sorted[i].dist, sSpd = sorted[i].spd, sHdg = sorted[i].hdg;
+    if (snap_units == 1) { sAlt *= 0.3048f; sDist *= 1.852f; sSpd *= 1.852f; }
+    char sbuf[128];
+    snprintf(sbuf, sizeof(sbuf), "SEC|%s|%.0f%s|%.1f%s|%.0f%s|%03d\xF8", sorted[i].flight.substring(0,6).c_str(), sAlt, uAlt, sDist, snap_units==1?"KM":"NM", sSpd, uSpd, (int)sHdg);
+    ptxt += "\n" + String(sbuf);
   }
   setPreview(ptxt);
 }
-
 void modeAirport() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
   float c_lat, c_lon; int c_range;
@@ -312,7 +342,6 @@ void modeAirport() {
   AcEntry arrivals[5]; int arrCount = 0;
   AcEntry departures[5]; int depCount = 0;
   String infFlight = ""; int infRate = 0; float infLat = 0, infLon = 0;
-
   {
     WiFiClientSecure client; client.setInsecure();
     HTTPClient http; http.setTimeout(8000); http.begin(client, api);
@@ -320,12 +349,10 @@ void modeAirport() {
     int code = http.GET();
     Log.printf("ADSB.fi Airport status: %d\n", code);
     if (code != 200) { drawText("AIRPORT ERR " + String(code)); http.end(); return; }
-    
     adsbOk = true; lastSuccess = millis();
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, http.getStream());
     http.end(); // Close connection early
-
     if (err) { drawText("PARSE ERR"); return; }
     JsonArray ac = doc["ac"].as<JsonArray>();
     int total = ac.size();
@@ -335,7 +362,6 @@ void modeAirport() {
       else airCount++;
     }
     Log.printf("ADSB Airport ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
-
     float best_alt = 99999;
     for (JsonObject a : ac) {
       if (!a["alt_baro"].is<int>()) continue;
@@ -370,54 +396,56 @@ void modeAirport() {
       }
     }
   } // doc and http stream are destroyed here
-
   if (infFlight.length() > 2) {
     fetchAirportInference(infFlight, infRate, infLat, infLon);
   }
   String airport = inferred_apt_code == "---" ? "LOCAL" : inferred_apt_code;
   tftClear(); tftHeader((" " + airport + " ARRIVALS").c_str(), TFT_ORANGE);
-  int y = 28; tft.setTextSize(1);
+  int y = 28;
   if (inferred_apt_name.length() > 0) {
-    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK); 
+    tft.setCursor(4, y); tft.print(inferred_apt_city); y += 20;
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
     tft.setCursor(4, y); tft.print(inferred_apt_name); y += 12;
-    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.setCursor(4, y); tft.print(inferred_apt_icao + "  " + inferred_apt_city); y += 12;
-    tft.setCursor(4, y); tft.printf("%.4f, %.4f", inferred_apt_lat, inferred_apt_lon); y += 16;
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.setCursor(4, y); tft.print("ICAO:" + inferred_apt_icao + "  IATA:" + inferred_apt_code + "  ALT:" + String(inferred_apt_alt) + "ft"); y += 16;
   } else { y += 12; }
   if (arrCount == 0 && depCount == 0) {
     tft.setTextColor(TFT_YELLOW, TFT_BLACK); tft.setCursor(4,y); tft.print("No traffic detected");
   } else {
     if (arrCount > 0) {
+      tft.setTextSize(1);
       tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4, y); tft.print("ARRIVALS"); y += 12;
       for (int i = 0; i < arrCount; i++) {
         tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setCursor(4,   y); tft.print(arrivals[i].flight);
         tft.setTextColor(TFT_GREEN,    TFT_BLACK); tft.setCursor(100, y); tft.printf("%d ft", arrivals[i].alt);
-        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(220, y); tft.printf("%.1f nm", arrivals[i].dist);
-        y += 13;
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(200, y); tft.printf("%.1f nm", arrivals[i].dist);
+        y += 14;
       }
       y += 4;
     }
     if (depCount > 0) {
+      tft.setTextSize(1);
       tft.setTextColor(TFT_MAGENTA, TFT_BLACK); tft.setCursor(4, y); tft.print("DEPARTURES"); y += 12;
       for (int i = 0; i < depCount; i++) {
         tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setCursor(4,   y); tft.print(departures[i].flight);
         tft.setTextColor(TFT_GREEN,    TFT_BLACK); tft.setCursor(100, y); tft.printf("%d ft", departures[i].alt);
-        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(220, y); tft.printf("%.1f nm", departures[i].dist);
-        y += 13;
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setCursor(200, y); tft.printf("%.1f nm", departures[i].dist);
+        y += 14;
       }
     }
   }
   String coords = String(inferred_apt_lat, 4) + "," + String(inferred_apt_lon, 4);
-  String txt = "AIRPORT MONITOR\n" + airport + "\n" + inferred_apt_name + "|" + inferred_apt_city + "|" + inferred_apt_icao + "|" + coords + "\n";
+  String txt = "AIRPORT MONITOR\n" + airport + "\n" + inferred_apt_name + "|" + inferred_apt_city + "|" + inferred_apt_icao + "|" + coords + "|" + String(inferred_apt_alt) + "\n";
   for (int i = 0; i < arrCount; i++)
     txt += "ARR:" + arrivals[i].flight + "|" + String(arrivals[i].alt) + " ft|" + String(arrivals[i].dist,1) + " nm\n";
   for (int i = 0; i < depCount; i++)
     txt += "DEP:" + departures[i].flight + "|" + String(departures[i].alt) + " ft|" + String(departures[i].dist,1) + " nm\n";
-  
   if (arrCount == 0 && depCount == 0) txt += "No traffic detected";
   setPreview(txt);
 }
-
 void modeMap() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
   float c_lat, c_lon; int c_range;
@@ -432,11 +460,9 @@ void modeMap() {
   int code = http.GET();
   Log.printf("ADSB.fi Map status: %d\n", code);
     if (code != 200) { drawText("MAP ERR " + String(code)); http.end(); return; }
-  
   adsbOk = true; lastSuccess = millis();
   String bestInfFlight = ""; int bestInfRate = 0; float bestInfLat = 0, bestInfLon = 0;
   String txt = "RADAR MAP\n";
-  
   {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, http.getStream());
@@ -453,7 +479,6 @@ void modeMap() {
       else airCount++;
     }
     Log.printf("MAP ac.size: %d (Air: %d, Ground: %d)\n", total, airCount, groundCount);
-
     tftClear();
     const int cx = 160, cy = 130, maxR = 100;
     tft.drawCircle(cx, cy, maxR,     TFT_DARKCYAN);
@@ -469,7 +494,6 @@ void modeMap() {
     float rangeNm = c_range * 0.54f;
     int plotCount = 0;
     float best_alt = 99999;
-
     for (JsonObject a : ac) {
       if (plotCount >= 15) break;
       if (!a["alt_baro"].is<int>()) continue;
@@ -486,7 +510,6 @@ void modeMap() {
       }
       String type = a["t"]      | "";
       if (d > rangeNm || acLat == 0) continue;
-
       if (alt < best_alt && alt < 5000) {
         best_alt = alt;
         bestInfFlight = fl;
@@ -494,14 +517,12 @@ void modeMap() {
         bestInfLon = acLon;
         bestInfRate = a["baro_rate"] | 0;
       }
-
       float dx = (acLon - c_lon) * cos(radians(c_lat));
       float dy = (acLat - c_lat);
       float maxDeg = c_range / 111.0f;
       if (maxDeg == 0) continue;
       int px = constrain(cx + (int)((dx / maxDeg) * maxR), 10, 310);
       int py = constrain(cy - (int)((dy / maxDeg) * maxR), 20, 230);
-      
       float track = a["track"] | -1.0f;
       if (track >= 0) {
         float trad = (track - 90) * PI / 180.0;
@@ -512,7 +533,6 @@ void modeMap() {
       } else {
         tft.fillCircle(px, py, 3, TFT_CYAN);
       }
-      
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setCursor(px + 5, py - 3); tft.print(fl);
       if (type.length()) { tft.setCursor(px + 5, py + 5); tft.print(type); }
@@ -523,11 +543,9 @@ void modeMap() {
       plotCount++;
     }
   } // doc destroyed here
-
   if (bestInfFlight.length() > 2) {
     fetchAirportInference(bestInfFlight, bestInfRate, bestInfLat, bestInfLon);
   }
-  
   if (inferred_apt_lat != 0 && inferred_apt_code != "---") {
     float apt_d_km = haversine(c_lat, c_lon, inferred_apt_lat, inferred_apt_lon);
     float apt_d_nm = apt_d_km / 1.852f;
@@ -542,7 +560,6 @@ void modeMap() {
         // Constrain to slightly within radar circles for visibility
         apx = constrain(apx, cx - maxR, cx + maxR);
         apy = constrain(apy, cy - maxR, cy + maxR);
-
         tft.fillCircle(apx, apy, 4, TFT_RED);
         tft.setTextColor(TFT_RED, TFT_BLACK);
         tft.setCursor(apx + 5, apy - 4); tft.print(inferred_apt_code);
@@ -559,7 +576,6 @@ void modeMap() {
   Log.println("MAP Preview: " + txt);
   setPreview(txt);
 }
-
 void modeWeather() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
   float c_lat, c_lon;
@@ -611,14 +627,14 @@ void modeWeather() {
   }
   http2.end();
   tftClear(); tftHeader(" WEATHER", 0x07E0);
-  int y = 30; tft.setTextSize(1); tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Temperature   %.1f C", temp);    y+=16;
-  tft.setCursor(4,y); tft.printf("Humidity      %d%%",  humidity);  y+=16;
-  tft.setCursor(4,y); tft.printf("Precipitation %.1f mm", rain);      y+=16;
-  tft.setCursor(4,y); tft.printf("UV Index      %d",    uv);        y+=16;
-  tft.setCursor(4,y); tft.printf("Wind Speed    %.1f kph", wind); y+=16;
-  tft.setCursor(4,y); tft.printf("Wind Dir      %d°", (int)windDir); y+=16;
-  tft.setCursor(4,y); tft.printf("Visibility    %d km", visibility / 1000); y+=16;
+  int y = 30; tft.setTextSize(2); tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setCursor(4,y); tft.printf("Temp   %.1f C", temp);    y+=20;
+  tft.setCursor(4,y); tft.printf("Humid  %d%%",  humidity);  y+=20;
+  tft.setCursor(4,y); tft.printf("Precip %.1f mm", rain);      y+=20;
+  tft.setCursor(4,y); tft.printf("UV     %d",    uv);        y+=20;
+  tft.setCursor(4,y); tft.printf("Wind   %.1f kph", wind); y+=20;
+  tft.setCursor(4,y); tft.printf("WDir   %d°", (int)windDir); y+=20;
+  tft.setCursor(4,y); tft.printf("Vis    %d km", visibility / 1000); y+=20;
   if (aqi >= 0) {
     uint16_t aqiColor = aqi > 150 ? TFT_RED : aqi > 100 ? TFT_ORANGE : aqi > 50 ? TFT_YELLOW : TFT_GREEN;
     tft.setTextColor(aqiColor, TFT_BLACK);
@@ -635,7 +651,6 @@ void modeWeather() {
   if (aqi >= 0) txt += "AQI           " + String(aqi) + " (" + aqiLabel(aqi) + ")";
   setPreview(txt);
 }
-
 void modeClock() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) { drawText("NTP SYNC..."); return; }
@@ -648,16 +663,15 @@ void modeClock() {
   strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S",    &timeinfo);
   strftime(dateBuf, sizeof(dateBuf), "%a, %d %b %Y",&timeinfo);
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_CYAN,     TFT_BLACK); tft.setTextSize(4); tft.drawString(timeBuf,           160, 85);
-  tft.setTextColor(TFT_WHITE,    TFT_BLACK); tft.setTextSize(2); tft.drawString(dateBuf,           160,135);
+  tft.setTextColor(TFT_CYAN,     TFT_NAVY); tft.setTextSize(4); tft.drawString(timeBuf,           160, 85);
+  tft.setTextColor(TFT_WHITE,    TFT_NAVY); tft.setTextSize(2); tft.drawString(dateBuf,           160,135);
   tft.setTextColor(TFT_DARKGREY, TFT_BLACK); tft.setTextSize(1); tft.drawString(c_timezone.c_str(),160,165);
   tft.setTextDatum(TL_DATUM);
   setPreview("CLOCK\n" + String(timeBuf) + "\n" + String(dateBuf) + "\n" + c_timezone);
 }
-
 void modeSystem() {
   tftClear(); tftHeader(" SYSTEM MONITOR", TFT_BLUE);
-  int y = 28; tft.setTextSize(1);
+  int y = 28; tft.setTextSize(2);
   int rssi = WiFi.RSSI();
   int bars = rssi > -50 ? 4 : rssi > -60 ? 3 : rssi > -70 ? 2 : rssi > -80 ? 1 : 0;
   unsigned long ago = (millis() - lastSuccess) / 1000;
@@ -666,28 +680,27 @@ void modeSystem() {
   c_mode = mode;
   xSemaphoreGive(configMutex);
   bool snap_adsb = adsbOk, snap_wx = weatherOk;
-  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- WiFi --"); y+=14;
+  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- WiFi --"); y+=20;
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("SSID: %s", WiFi.SSID().c_str()); y+=12;
-  tft.setCursor(4,y); tft.printf("Signal: %d dBm", rssi);
+  tft.setCursor(4,y); tft.printf("SSID: %.14s", WiFi.SSID().c_str()); y+=20;
+  tft.setCursor(4,y); tft.printf("Sig: %d dBm", rssi);
   for (int i = 0; i < 4; i++) {
     tft.setTextColor(i < bars ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
     tft.setCursor(200 + i*8, y); tft.print("|");
   }
-  y+=12;
+  y+=20;
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Channel: %d", WiFi.channel()); y+=12;
-  tft.setCursor(4,y); tft.printf("IP: %s", WiFi.localIP().toString().c_str()); y+=16;
-  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- API Status --"); y+=14;
+  tft.setCursor(4,y); tft.printf("IP: %s", WiFi.localIP().toString().c_str()); y+=24;
+  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- API --"); y+=20;
   tft.setCursor(4,y); tft.setTextColor(snap_adsb ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.printf("ADSB API: %s", snap_adsb ? "OK" : "FAIL"); y+=12;
-  tft.setCursor(4,y); tft.setTextColor(snap_wx ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.printf("Weather API: %s", snap_wx ? "OK" : "FAIL"); y+=12;
+  tft.printf("ADSB: %s ", snap_adsb ? "OK" : "FAIL");
+  tft.setTextColor(snap_wx ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  tft.printf("WX: %s", snap_wx ? "OK" : "FAIL"); y+=20;
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Last update: %lus ago", ago); y+=16;
-  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- System --"); y+=14;
+  tft.setCursor(4,y); tft.printf("Last : %lus ago", ago); y+=24;
+  tft.setTextColor(TFT_CYAN, TFT_BLACK); tft.setCursor(4,y); tft.print("-- Sys --"); y+=20;
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Heap: %d KB", ESP.getFreeHeap()/1024); y+=12;
+  tft.setCursor(4,y); tft.printf("Heap: %d KB", ESP.getFreeHeap()/1024); y+=20;
   tft.setCursor(4,y); tft.printf("Mode: %d", c_mode);
   String txt = "SYSTEM MONITOR\n";
   txt += "SSID: " + WiFi.SSID() + "\n";
@@ -700,7 +713,6 @@ void modeSystem() {
   txt += "Heap: " + String(ESP.getFreeHeap()/1024) + " KB";
   setPreview(txt);
 }
-
 void updateMode() {
   if (savePending) { Log.println("updateMode: skip, save pending"); return; }
   Log.printf("updateMode: starting mode %d\n", mode);

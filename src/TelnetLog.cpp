@@ -1,21 +1,16 @@
 #include "TelnetLog.h"
-
 // Define the global instance
 TelnetLogger Log;
-
 TelnetLogger::TelnetLogger() : telnetServer(23) {
 }
-
 void TelnetLogger::begin(unsigned long baud) {
     Serial.begin(baud);
 }
-
 void TelnetLogger::startServer() {
     telnetServer.begin();
     telnetServer.setNoDelay(true);
     Serial.println("Telnet server started on port 23");
 }
-
 void TelnetLogger::handleClient() {
     if (telnetServer.hasClient()) {
         if (!telnetClient || !telnetClient.connected()) {
@@ -29,7 +24,6 @@ void TelnetLogger::handleClient() {
         }
     }
 }
-
 size_t TelnetLogger::write(uint8_t c) {
     size_t result = Serial.write(c);
     if (telnetClient && telnetClient.connected()) {
@@ -37,7 +31,6 @@ size_t TelnetLogger::write(uint8_t c) {
     }
     return result;
 }
-
 size_t TelnetLogger::write(const uint8_t *buffer, size_t size) {
     size_t result = Serial.write(buffer, size);
     if (telnetClient && telnetClient.connected()) {
@@ -45,7 +38,6 @@ size_t TelnetLogger::write(const uint8_t *buffer, size_t size) {
     }
     return result;
 }
-
 int TelnetLogger::printf(const char *format, ...) {
     char loc_buf[64];
     char * temp = loc_buf;

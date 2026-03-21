@@ -5,9 +5,7 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
-
 AsyncWebServer server(80);
-
 bool checkAuth(AsyncWebServerRequest* req) {
   String u, p;
   if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
@@ -20,7 +18,6 @@ bool checkAuth(AsyncWebServerRequest* req) {
   if (!req->authenticate(u.c_str(), p.c_str())) { req->requestAuthentication(); return false; }
   return true;
 }
-
 void setupServer() {
   server.on("/", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
@@ -32,7 +29,6 @@ void setupServer() {
   server.on("/script.js", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->send(LittleFS, "/script.js", "application/javascript");
   });
-
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     String previewSnap;
@@ -60,7 +56,6 @@ void setupServer() {
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });
-
   server.on("/api/mode", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     if (!req->hasParam("m")) { req->send(400, "text/plain", "missing m"); return; }
@@ -73,7 +68,6 @@ void setupServer() {
     Log.printf("/api/mode -> mode=%d\n", m);
     req->send(200, "application/json", "{\"mode\":" + String(m) + "}");
   });
-
   server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     JsonDocument doc;
@@ -92,7 +86,6 @@ void setupServer() {
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });
-
   server.on("/api/config/save", HTTP_POST, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     savePending = true;
@@ -115,7 +108,6 @@ void setupServer() {
     if (req->hasParam("f_ground", true)) filterGround = req->getParam("f_ground", true)->value() == "true";
     if (req->hasParam("f_glider", true)) filterGliders = req->getParam("f_glider", true)->value() == "true";
     if (req->hasParam("btn_pin", true))  btnPin = req->getParam("btn_pin", true)->value().toInt();
-
     configTime(tzOffset, 0, "pool.ntp.org", "time.nist.gov");
     bool ok = saveConfig();
     float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset;
@@ -129,7 +121,6 @@ void setupServer() {
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });
-
   server.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     if (!req->hasParam("ssid") || !req->hasParam("pass")) { req->send(400, "text/plain", "missing ssid or pass"); return; }
@@ -142,7 +133,6 @@ void setupServer() {
     req->send(ok ? 200 : 500, "text/plain", ok ? "saved, rebooting" : "save failed");
     if (ok) { delay(500); ESP.restart(); }
   });
-
   server.on("/api/credentials", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     if (!req->hasParam("user") || !req->hasParam("pass")) { req->send(400, "text/plain", "missing user or pass"); return; }
@@ -154,7 +144,6 @@ void setupServer() {
     xSemaphoreGive(configMutex);
     req->send(ok ? 200 : 500, "text/plain", ok ? "ok" : "save failed");
   });
-
   ElegantOTA.begin(&server);
   server.begin();
   Log.println("Web server started");

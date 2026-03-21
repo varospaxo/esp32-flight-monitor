@@ -6,9 +6,7 @@
 <title>ESP32 Radar — Dashboard</title>
 <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-
 <header>
   <div class="brand">
     <span class="logo">◉</span> ESP32 Radar
@@ -19,9 +17,7 @@
     <span id="rssi-badge" class="badge">-- dBm</span>
   </div>
 </header>
-
 <main>
-
   <!-- Mode Selector -->
   <section class="card">
     <h3>Mode</h3>
@@ -34,7 +30,6 @@
       <button class="mode-btn" data-m="6" id="mb6">⚙ System</button>
     </div>
   </section>
-
   <!-- Display Preview -->
   <section class="card">
     <div class="preview-header">
@@ -51,7 +46,6 @@
       <pre id="preview-text">Waiting for data...</pre>
     </div>
   </section>
-
   <!-- Settings -->
   <section class="card">
     <div class="preview-header">
@@ -61,19 +55,15 @@
     <div class="form-grid" style="margin-top: 15px;">
       <label>Latitude</label>
       <input type="number" id="lat" step="0.0001" placeholder="19.076">
-
       <label>Longitude</label>
       <input type="number" id="lon" step="0.0001" placeholder="72.877">
-
       <label>Range (km)</label>
       <input type="number" id="range" min="1" max="500" placeholder="10">
-
       <label>Units</label>
       <select id="units">
         <option value="0">Imperial (ft, kts, nm)</option>
         <option value="1">Metric (m, km/h, km)</option>
       </select>
-
       <label>Filters</label>
       <div style="display:flex; gap:15px; grid-column: 2;">
         <label style="display:flex; align-items:center; gap:5px; margin:0;">
@@ -83,42 +73,35 @@
           <input type="checkbox" id="f-glider"> Hide Gliders
         </label>
       </div>
-
       <label>Button Pin</label>
       <input type="number" id="btn-pin" min="-1" max="40" placeholder="0">
-
       <label>Timezone</label>
       <input type="text" id="timezone" placeholder="Asia/Kolkata" data-offset="19800">
     </div>
     <button id="save-cfg" class="btn btn-primary" onclick="saveConfig()">Save Settings</button>
   </section>
-
   <!-- Dashboard Credentials -->
   <section class="card">
     <h3>Dashboard Credentials</h3>
     <div class="form-grid">
       <label>Username</label>
       <input type="text" id="dash-user" placeholder="admin">
-
       <label>Password</label>
       <input type="password" id="dash-pass" placeholder="New Password">
     </div>
     <button class="btn btn-primary" onclick="saveCredentials()">Update Login</button>
   </section>
-
   <!-- WiFi -->
   <section class="card">
     <h3>WiFi Configuration</h3>
     <div class="form-grid">
       <label>SSID</label>
       <input type="text" id="wifi-ssid" placeholder="Network name">
-
       <label>Password</label>
       <input type="password" id="wifi-pass" placeholder="Password">
     </div>
     <button class="btn btn-warn" onclick="saveWifi()">Save & Reboot</button>
   </section>
-
   <!-- System Info -->
   <section class="card card-sm">
     <h3>System</h3>
@@ -135,12 +118,9 @@
       <a href="/update" class="btn btn-sm">OTA Update</a>
     </div>
   </section>
-
 </main>
-
 <!-- Toast -->
 <div id="toast" class="toast"></div>
-
 <script src="script.js"></script>
 </body>
 </html>

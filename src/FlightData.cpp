@@ -4,40 +4,33 @@
 #include <HTTPClient.h>
 #include "Utils.h"
 #include "Config.h"
-
 float inferred_apt_lat = 0;
 float inferred_apt_lon = 0;
 String inferred_apt_code = "---";
 String inferred_apt_name = "";
 String inferred_apt_city = "";
 String inferred_apt_icao = "";
-
+int inferred_apt_alt = 0;
 void inferAirport(JsonArray ac) {
   if (inferred_apt_code != "---") {
     if (millis() - lastInference < 60000) return; // Wait 1 minute between refreshes
   }
-
   float best_alt = 99999;
   String best_flight = "";
   float best_lat = 0, best_lon = 0;
   int best_rate = 0;
-
   for (JsonObject a : ac) {
     if (!a["alt_baro"].is<int>()) continue;
     int alt = a["alt_baro"].as<int>();
     if (alt <= 0 || alt > 12000) continue; // Ignore high altitude or ground
-    
     float acLat = a["lat"] | 0.0f;
     float acLon = a["lon"] | 0.0f;
     if (acLat == 0) continue;
-
     int rate = a["baro_rate"] | 0;
-    
     // Priority: Lower is better, but descending/climbing is best
     // We want to find the flight most likely to be interacting with a local airport.
     float score = alt; 
     if (abs(rate) > 300) score *= 0.5f; // Prioritize those with clear vertical movement
-
     if (score < best_alt) {
       best_alt = score; // Using alt as a base for score
       best_flight = a["flight"] | "";
@@ -46,22 +39,18 @@ void inferAirport(JsonArray ac) {
       best_rate = rate;
     }
   }
-
   best_flight.trim();
   if (best_lat != 0 && best_flight.length() > 2) {
     fetchAirportInference(best_flight, best_rate, best_lat, best_lon);
   }
 }
-
 bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLon) {
   if (flight.length() < 3) return false;
   if (ESP.getFreeHeap() < 60000) {
     Log.printf("fetchAirportInference: skip, low heap %u\n", ESP.getFreeHeap());
     return false;
   }
-
   Log.printf("Inferring airport from flight: %s\n", flight.c_str());
-  
   // Clear previous state
   inferred_apt_code = "---";
   inferred_apt_name = "";
@@ -69,7 +58,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
   inferred_apt_icao = "";
   inferred_apt_lat = 0;
   inferred_apt_lon = 0;
-
+  inferred_apt_alt = 0;
   WiFiClientSecure client;
   client.setInsecure();
   HTTPClient http;
@@ -79,7 +68,6 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
   http.setUserAgent("Mozilla/5.0");
   int code = http.GET();
   Log.printf("ADS-B DB Status: %d\n", code);
-  
   bool success = false;
   if (code == 200) {
     JsonDocument db;
@@ -91,7 +79,6 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
         JsonObject dest = fr["destination"];
         String destCode = dest["iata_code"] | "";
         String origCode = orig["iata_code"] | "";
-        
         JsonObject aptObj;
         if (baro_rate < -150) { // Clearly descending -> Destination
           aptObj = dest;
@@ -102,7 +89,6 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
           float dOrig = 9999, dDest = 9999;
           if (origCode.length()) dOrig = haversine(lat, lon, (float)orig["latitude"], (float)orig["longitude"]);
           if (destCode.length()) dDest = haversine(lat, lon, (float)dest["latitude"], (float)dest["longitude"]);
-          
           if (dDest < dOrig && destCode.length()) aptObj = dest;
           else if (origCode.length()) aptObj = orig;
         }
@@ -113,7 +99,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
           inferred_apt_icao = aptObj["icao_code"]     | "";
           inferred_apt_lat  = aptObj["latitude"]      | acLat;
           inferred_apt_lon  = aptObj["longitude"]     | acLon;
-
+          inferred_apt_alt  = aptObj["elevation"]     | 0;
           // Sanity check: if airport is > 500km away, it's likely a stale/wrong DB entry for the callsign
           float d_km = haversine(lat, lon, inferred_apt_lat, inferred_apt_lon);
           if (d_km > 500.0f) {
@@ -124,6 +110,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
             inferred_apt_icao = "";
             inferred_apt_lat = 0;
             inferred_apt_lon = 0;
+            inferred_apt_alt = 0;
             success = false;
           } else {
             Log.printf("Inferred: %s (%s) at %.4f, %.4f\n", 
