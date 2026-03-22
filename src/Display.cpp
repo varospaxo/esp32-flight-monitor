@@ -8,7 +8,7 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) 
   return 1;
 }
 void tftClear() {
-  tft.fillScreen(TFT_NAVY);
+  tft.fillScreen(TFT_BLACK);
 }
 void tftHeader(const char* title, uint16_t color) {
   tft.fillRect(0, 0, 320, 22, color);
