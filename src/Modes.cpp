@@ -10,7 +10,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 void modeFlight() {
-  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
+  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI\nCONNECT TO: ESP32-Radar\nCONFIG AT: 192.168.4.1"); return; }
   float c_lat, c_lon; int c_range;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon; c_range = range_km;
@@ -101,12 +101,12 @@ void modeFlight() {
             originIcao = orig["icao_code"] | "";
             originCountry = orig["country_iso_name"] | "";
             originCity = orig["municipality"] | "";
-            originIata = orig["iata_code"] | "";
+            originIata = (orig["iata_code"] | orig["iata"]) | "";
             destName = dest["name"] | "";
             destIcao = dest["icao_code"] | "";
             destCountry = dest["country_iso_name"] | "";
             destCity = dest["municipality"] | "";
-            destIata = dest["iata_code"] | "";
+            destIata = (dest["iata_code"] | dest["iata"]) | "";
             String oCode = originIata.length() ? originIata : originIcao;
             String dCode = destIata.length() ? destIata : destIcao;
             if (oCode.length() && dCode.length()) route = oCode + "-" + dCode;
@@ -127,19 +127,21 @@ void modeFlight() {
   String fullOrig = "";
   if (originName.length()) {
     if (originCity.length() && originName.indexOf(originCity) == -1) fullOrig += originCity + ", ";
-    if (originIcao.length()) fullOrig += originIcao + " - ";
+    String oCode = originIcao.length() ? originIcao : originIata;
+    if (oCode.length()) fullOrig += oCode + " - ";
     fullOrig += originName;
   }
   String fullDest = "";
   if (destName.length()) {
     if (destCity.length() && destName.indexOf(destCity) == -1) fullDest += destCity + ", ";
-    if (destIcao.length()) fullDest += destIcao + " - ";
+    String dCode = destIcao.length() ? destIcao : destIata;
+    if (dCode.length()) fullDest += dCode + " - ";
     fullDest += destName;
   }
   tftClear();
   tft.fillRect(0, 0, 320, 22, TFT_YELLOW);
   tft.setTextColor(TFT_BLACK, TFT_YELLOW); tft.setTextSize(1);
-  tft.setCursor(4, 8); tft.print("OVERHEAD TRACKER"); 
+  tft.setCursor(4, 8); tft.printf("OVERHEAD TRACKER  %dkm", c_range); 
   tft.setCursor(290, 8); tft.print(String(1) + "/" + String(totalAcCount)); 
   int y = 26; 
   int snap_units;
@@ -202,8 +204,8 @@ void modeFlight() {
   if (modelStr.length() == 0) modelStr = sorted[0].type;
   if (modelStr.length() == 0) modelStr = categoryName(sorted[0].cat);
   String routeStr = "UNKNOWN";
-  String oCode = originIcao.length() ? originIcao : originIata;
-  String dCode = destIcao.length() ? destIcao : destIata;
+  String oCode = originIata.length() ? originIata : originIcao;
+  String dCode = destIata.length() ? destIata : destIcao;
   if (oCode.length() && dCode.length()) routeStr = oCode + " > " + dCode;
   tft.setTextSize(2);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
@@ -218,13 +220,13 @@ void modeFlight() {
   auto drawAirportLocal = [&](int curY, String name, String country) {
     if (name.length() == 0) return;
     int flagX = 4;
-    // Removed duplicate flag fetch here to keep it lean, it's drawn in the bottom section if we want,
-    // wait, we wanted flags in Row 3! I'll re-implement the flag draw exactly.
-    if (country.length() == 2 && ESP.getFreeHeap() > 60000) {
-      String flagUrl = "https://flagcdn.com/w40/" + country + ".jpg";
-      HTTPClient fhtp; WiFiClientSecure fcli; fcli.setInsecure();
-      fhtp.begin(fcli, flagUrl);
+    String cLow = country; cLow.toLowerCase(); cLow.trim();
+    if (cLow.length() == 2) {
+      String flagUrl = "https://flagcdn.com/w20/" + cLow + ".jpg";
+      WiFiClientSecure fcli; fcli.setInsecure();
+      HTTPClient fhtp; fhtp.setTimeout(5000); fhtp.begin(fcli, flagUrl);
       int code = fhtp.GET();
+      Log.printf("Flag fetch (%s): %d\n", cLow.c_str(), code);
       if (code == 200) {
         String pld = fhtp.getString();
         if (pld.length() > 0) {
@@ -237,7 +239,7 @@ void modeFlight() {
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
     tft.setTextSize(1);
     tft.setCursor(flagX + 24, curY);
-    tft.print(name.substring(0, 48));
+    tft.print(name.substring(0, 42)); // Truncated to prevent overflow
   };
   if (fullOrig.length() || fullDest.length()) {
     drawAirportLocal(y, fullOrig, originCountry); y += 14;
@@ -256,18 +258,18 @@ void modeFlight() {
   tft.setTextSize(1);
   tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   tft.setCursor(4, y); tft.print("PHASE");
-  tft.setCursor(110, y); tft.print("ALTITUDE");
-  tft.setCursor(200, y); tft.print("SPEED");
-  tft.setCursor(260, y); tft.print("DIST");
+  tft.setCursor(100, y); tft.printf("ALT (%s)", uAlt);
+  tft.setCursor(190, y); tft.printf("SPD (%s)", uSpd);
+  tft.setCursor(265, y); tft.printf("DST (%s)", uDist);
   y += 10;
   tft.setTextSize(2);
   tft.setTextColor(phaseColor, TFT_BLACK);
   tft.setCursor(4, y); tft.print(phase);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setCursor(110, y); tft.printf("%.0f %s", dAlt, uAlt);
-  tft.setCursor(200, y); tft.printf("%.0f %s", dSpd, uSpd);
+  tft.setCursor(100, y); tft.printf("%.0f", dAlt);
+  tft.setCursor(190, y); tft.printf("%.0f", dSpd);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setCursor(260, y); tft.printf("%.1f %s", dDist, uDist);
+  tft.setCursor(265, y); tft.printf("%.1f", dDist);
   y += 18;
   uint16_t vsColor = dVSpd > 100 ? TFT_GREEN : (dVSpd < -100 ? TFT_RED : TFT_WHITE);
   tft.setTextSize(1);
@@ -334,7 +336,7 @@ void modeFlight() {
   setPreview(ptxt);
 }
 void modeAirport() {
-  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
+  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI\nCONNECT TO: ESP32-Radar\nCONFIG AT: 192.168.4.1"); return; }
   float c_lat, c_lon; int c_range;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon; c_range = range_km;
@@ -403,7 +405,7 @@ void modeAirport() {
     fetchAirportInference(infFlight, infRate, infLat, infLon);
   }
   String airport = inferred_apt_code == "---" ? "LOCAL" : inferred_apt_code;
-  tftClear(); tftHeader((" " + airport + " ARRIVALS").c_str(), TFT_ORANGE);
+  tftClear(); tftHeader((" " + airport + " ARRIVALS (" + String(c_range) + "km)").c_str(), TFT_ORANGE);
   int y = 28;
   if (inferred_apt_name.length() > 0) {
     tft.setTextSize(2);
@@ -450,7 +452,7 @@ void modeAirport() {
   setPreview(txt);
 }
 void modeMap() {
-  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
+  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI\nCONNECT TO: ESP32-Radar\nCONFIG AT: 192.168.4.1"); return; }
   float c_lat, c_lon; int c_range;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon; c_range = range_km;
@@ -537,7 +539,7 @@ void modeMap() {
       } else {
         tft.fillCircle(px, py, 3, TFT_CYAN);
       }
-      tft.setTextSize(2);
+      tft.setTextSize(1);
       tft.setTextColor(TFT_YELLOW, TFT_BLACK);
       tft.setCursor(px + 6, py - 8); tft.print(fl);
       if (type.length()) { 
@@ -587,7 +589,7 @@ void modeMap() {
   setPreview(txt);
 }
 void modeWeather() {
-  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI"); return; }
+  if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI\nCONNECT TO: ESP32-Radar\nCONFIG AT: 192.168.4.1"); return; }
   float c_lat, c_lon;
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_lat = lat; c_lon = lon;
@@ -648,7 +650,7 @@ void modeWeather() {
   if (aqi >= 0) {
     uint16_t aqiColor = aqi > 150 ? TFT_RED : aqi > 100 ? TFT_ORANGE : aqi > 50 ? TFT_YELLOW : TFT_GREEN;
     tft.setTextColor(aqiColor, TFT_BLACK);
-    tft.setCursor(4,y); tft.printf("AQI           %d (%s)", aqi, aqiLabel(aqi).c_str());
+    tft.setCursor(4,y); tft.printf("AQI    %d (%s)", aqi, aqiLabel(aqi).c_str());
   }
   String txt = "WEATHER\n";
   txt += "Temperature   " + String(temp,1) + " C\n";

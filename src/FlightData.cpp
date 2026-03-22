@@ -77,8 +77,8 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
       if (!fr.isNull()) {
         JsonObject orig = fr["origin"];
         JsonObject dest = fr["destination"];
-        String destCode = dest["iata_code"] | "";
-        String origCode = orig["iata_code"] | "";
+        String destCode = (dest["iata_code"] | dest["iata"]) | "";
+        String origCode = (orig["iata_code"] | orig["iata"]) | "";
         JsonObject aptObj;
         if (baro_rate < -150) { // Clearly descending -> Destination
           aptObj = dest;
@@ -93,7 +93,7 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
           else if (origCode.length()) aptObj = orig;
         }
         if (!aptObj.isNull()) {
-          inferred_apt_code = aptObj["iata_code"]     | "";
+          inferred_apt_code = (aptObj["iata_code"] | aptObj["iata"]) | "";
           inferred_apt_name = aptObj["name"]          | "";
           inferred_apt_city = aptObj["municipality"] | "";
           inferred_apt_icao = aptObj["icao_code"]     | "";
@@ -128,6 +128,8 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
   }
   http.end();
   lastInference = millis();
-  if (inferred_apt_code == "---" || inferred_apt_code == "") inferred_apt_code = "APT";
+  if (inferred_apt_code == "---" || inferred_apt_code == "") {
+    inferred_apt_code = (inferred_apt_icao.length() > 0) ? inferred_apt_icao : "APT";
+  }
   return success;
 }
