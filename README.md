@@ -11,6 +11,10 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - **Mode 5: NTP Clock**: Synchronized clock with configurable timezones.
 - **Mode 6: System Monitor**: WiFi status, API health, and system heap information.
 
+## Screenshots
+![TFT-SPI](https://github.com/user-attachments/assets/4412192b-1313-4715-8b49-02abb125c517)
+![TFT SPI 2](https://github.com/user-attachments/assets/f93f7650-ed1c-4a59-a957-c62a7de65fe1)
+
 ## Hardware Requirements
 
 - ESP32 (e.g., ESP32-WROOM-32)
