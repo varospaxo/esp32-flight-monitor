@@ -64,7 +64,7 @@ void setupServer() {
     if (!checkAuth(req)) return;
     if (!req->hasParam("m")) { req->send(400, "text/plain", "missing m"); return; }
     int m = req->getParam("m")->value().toInt();
-    if (m < 1 || m > 6)     { req->send(400, "text/plain", "m out of range"); return; }
+    if (m < 1 || m > 7)     { req->send(400, "text/plain", "m out of range"); return; }
     xSemaphoreTake(configMutex, portMAX_DELAY);
     mode = m;
     saveConfig();
@@ -73,6 +73,49 @@ void setupServer() {
     Log.printf("/api/mode -> mode=%d\n", m);
     req->send(200, "application/json", "{\"mode\":" + String(m) + "}");
   });
+  server.on("/api/upload-gif", HTTP_POST,
+    [](AsyncWebServerRequest* req) {
+      if (!checkAuth(req)) return;
+      if (req->_tempObject) {
+        req->send(400, "application/json", "{\"error\":\"File exceeds 512KB limit\"}");
+        return;
+      }
+      req->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"GIF uploaded successfully\"}");
+    },
+    [](AsyncWebServerRequest* req, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+      if (index == 0) {
+        Log.printf("Upload GIF start: %s\n", filename.c_str());
+        gifUploadPending = true;
+        delay(150); // Give loop() ample time to close the file if open
+        req->_tempFile = LittleFS.open("/custom.gif_tmp", "w");
+        req->_tempObject = (void*)0;
+      }
+      if (index + len > 524288) {
+        Log.println("Upload GIF: file exceeds 512KB limit");
+        if (req->_tempFile) {
+          req->_tempFile.close();
+        }
+        LittleFS.remove("/custom.gif_tmp");
+        req->_tempObject = (void*)1;
+        gifUploadPending = false;
+        return;
+      }
+      if (req->_tempFile && (size_t)req->_tempObject == 0) {
+        req->_tempFile.write(data, len);
+      }
+      if (final) {
+        if (req->_tempFile) {
+          req->_tempFile.close();
+        }
+        if ((size_t)req->_tempObject == 0) {
+          LittleFS.remove("/custom.gif");
+          LittleFS.rename("/custom.gif_tmp", "/custom.gif");
+          Log.printf("Upload GIF complete: %u bytes\n", index + len);
+        }
+        gifUploadPending = false;
+      }
+    }
+  );
   server.on("/api/config", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     JsonDocument doc;

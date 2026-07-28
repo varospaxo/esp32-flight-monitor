@@ -20,4 +20,6 @@ extern unsigned long lastUpdate;
 extern unsigned long lastModeCycle;
 extern unsigned long lastSuccess;
 extern unsigned long lastInference;
+extern int gifDelayMs;
+extern volatile bool gifUploadPending;
 #endif // GLOBALS_H

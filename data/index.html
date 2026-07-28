@@ -28,6 +28,7 @@
       <button class="mode-btn" data-m="4" id="mb4">🌤 Weather</button>
       <button class="mode-btn" data-m="5" id="mb5">⏰ Clock</button>
       <button class="mode-btn" data-m="6" id="mb6">⚙ System</button>
+      <button class="mode-btn" data-m="7" id="mb7">🎨 GIF</button>
     </div>
   </section>
   <!-- Display Preview -->
@@ -100,6 +101,16 @@
       <input type="password" id="dash-pass" placeholder="New Password">
     </div>
     <button class="btn btn-primary" onclick="saveCredentials()">Update Login</button>
+  </section>
+  <!-- Custom GIF -->
+  <section class="card">
+    <h3>Custom GIF</h3>
+    <div class="form-grid">
+      <label>Upload GIF</label>
+      <input type="file" id="gif-file" accept=".gif">
+    </div>
+    <div style="font-size:0.85em; color:#888; margin-bottom:10px; margin-top:5px;">Max size: 512KB.</div>
+    <button class="btn btn-primary" onclick="uploadGIF()">Upload GIF</button>
   </section>
   <!-- WiFi -->
   <section class="card">

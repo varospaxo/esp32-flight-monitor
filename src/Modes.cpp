@@ -9,6 +9,100 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <AnimatedGIF.h>
+#include <LittleFS.h>
+
+static AnimatedGIF gif;
+static File gifFile;
+static int gifXOffset = 0;
+static int gifYOffset = 0;
+
+static void * GIFOpenFile(const char *fname, int32_t *pSize) {
+  if (gifFile) gifFile.close();
+  gifFile = LittleFS.open(fname, "r");
+  if (gifFile) {
+    *pSize = gifFile.size();
+    return (void *)&gifFile;
+  }
+  return NULL;
+}
+
+static void GIFCloseFile(void *pHandle) {
+  File *f = (File *)pHandle;
+  if (f && *f) f->close();
+}
+
+static int32_t GIFReadFile(GIFFILE *pFile, uint8_t *pBuf, int32_t iLen) {
+  int32_t iBytesRead = iLen;
+  File *f = (File *)pFile->fHandle;
+  if (f && *f) {
+    if ((pFile->iSize - pFile->iPos) < iLen)
+      iBytesRead = pFile->iSize - pFile->iPos;
+    if (iBytesRead <= 0) return 0;
+    iBytesRead = f->read(pBuf, iBytesRead);
+    pFile->iPos += iBytesRead;
+    return iBytesRead;
+  }
+  return 0;
+}
+
+static int32_t GIFSeekFile(GIFFILE *pFile, int32_t iPosition) {
+  File *f = (File *)pFile->fHandle;
+  if (f && *f) {
+    f->seek(iPosition);
+    pFile->iPos = (int32_t)f->position();
+    return pFile->iPos;
+  }
+  return 0;
+}
+
+static void GIFDraw(GIFDRAW *pDraw) {
+  uint8_t *s;
+  uint16_t *palette;
+  int x, y, iWidth;
+
+  iWidth = pDraw->iWidth;
+  if (iWidth + pDraw->iX + gifXOffset > 320)
+    iWidth = 320 - (pDraw->iX + gifXOffset);
+  y = pDraw->iY + pDraw->y + gifYOffset;
+  if (y >= 240 || pDraw->iX + gifXOffset >= 320 || iWidth <= 0)
+    return;
+
+  palette = pDraw->pPalette;
+  s = pDraw->pPixels;
+
+  tft.setSwapBytes(true);
+
+  if (pDraw->ucHasTransparency) {
+    uint8_t ucTransparent = pDraw->ucTransparent;
+    int drawX = pDraw->iX + gifXOffset;
+    uint16_t usLine[320];
+    int startX = -1;
+    for (x = 0; x < iWidth; x++) {
+      if (s[x] != ucTransparent) {
+        usLine[x] = palette[s[x]];
+        if (startX == -1) startX = x;
+      } else {
+        if (startX != -1) {
+          tft.pushImage(drawX + startX, y, x - startX, 1, &usLine[startX]);
+          startX = -1;
+        }
+      }
+    }
+    if (startX != -1) {
+      tft.pushImage(drawX + startX, y, iWidth - startX, 1, &usLine[startX]);
+    }
+  } else {
+    uint16_t usLine[320];
+    for (x = 0; x < iWidth; x++) {
+      usLine[x] = palette[s[x]];
+    }
+    tft.pushImage(pDraw->iX + gifXOffset, y, iWidth, 1, usLine);
+  }
+  
+  tft.setSwapBytes(false); // Reset to default
+}
+
 void modeFlight() {
   if (WiFi.status() != WL_CONNECTED) { drawText("NO WIFI\nCONNECT TO: ESP32-Radar\nCONFIG AT: 192.168.4.1"); return; }
   float c_lat, c_lon; int c_range;
@@ -792,9 +886,71 @@ void modeSystem() {
   txt += "Heap: " + String(ESP.getFreeHeap()/1024) + " KB";
   setPreview(txt);
 }
+void closeGIF() {
+  if (gifFile) {
+    gif.close();
+    gifFile.close();
+  }
+  if (lastDrawnMode == 7) {
+    lastDrawnMode = -1;
+  }
+}
+
+void modeGIF() {
+  if (gifUploadPending) {
+    closeGIF();
+    setPreview("GIF PLAYER\nUploading...");
+    return;
+  }
+
+  if (!LittleFS.exists("/custom.gif")) {
+    if (lastDrawnMode != 7) {
+      tftClear();
+      tftHeader(" GIF PLAYER", TFT_MAGENTA);
+      tft.setTextDatum(MC_DATUM);
+      tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+      tft.setTextSize(2);
+      tft.drawString("NO GIF UPLOADED", 160, 100);
+      tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+      tft.setTextSize(1);
+      tft.drawString("Upload a GIF (<=100KB)", 160, 140);
+      tft.drawString("via Web Dashboard Settings", 160, 160);
+      tft.setTextDatum(TL_DATUM);
+      lastDrawnMode = 7;
+    }
+    setPreview("GIF PLAYER\nNO GIF UPLOADED\nUpload via Web Dashboard");
+    return;
+  }
+
+  if (lastDrawnMode != 7) {
+    tftClear();
+    gif.begin(GIF_PALETTE_RGB565_LE);
+    if (gif.open("/custom.gif", GIFOpenFile, GIFCloseFile, GIFReadFile, GIFSeekFile, GIFDraw)) {
+      gifXOffset = max(0, (320 - gif.getCanvasWidth()) / 2);
+      gifYOffset = max(0, (240 - gif.getCanvasHeight()) / 2);
+      lastDrawnMode = 7;
+    } else {
+      drawText("GIF OPEN ERR");
+      lastDrawnMode = -1;
+      return;
+    }
+  }
+
+  int delayMs = 100;
+  int res = gif.playFrame(true, &delayMs);
+  if (res == 0) {
+    gif.reset();
+  }
+  gifDelayMs = delayMs;
+
+  setPreview("GIF PLAYER\nPlaying /custom.gif\nResolution: " + String(gif.getCanvasWidth()) + "x" + String(gif.getCanvasHeight()));
+}
 void updateMode() {
   if (savePending) { Log.println("updateMode: skip, save pending"); return; }
-  Log.printf("updateMode: starting mode %d\n", mode);
+  if (mode != 7) {
+    Log.printf("updateMode: starting mode %d\n", mode);
+    closeGIF();
+  }
   updating = true;
   int c_mode;
   xSemaphoreTake(configMutex, portMAX_DELAY);
@@ -807,8 +963,9 @@ void updateMode() {
     case 4: modeWeather(); break;
     case 5: modeClock();   break;
     case 6: modeSystem();  break;
+    case 7: modeGIF();     break;
     default: Log.printf("updateMode: unknown mode %d\n", c_mode);
   }
   updating = false;
-  Log.println("updateMode: finished");
+  if (c_mode != 7) Log.println("updateMode: finished");
 }

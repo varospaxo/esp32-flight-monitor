@@ -7,5 +7,7 @@ void modeMap();
 void modeWeather();
 void modeClock();
 void modeSystem();
+void modeGIF();
+void closeGIF();
 void updateMode();
 #endif // MODES_H

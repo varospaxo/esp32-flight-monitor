@@ -385,6 +385,12 @@ function renderSystem(lines) {
     text(4, y, l, color, 2); y += 18;
   }
 }
+function renderGIF() {
+  clear();
+  header(' CUSTOM GIF', C.MAGENTA);
+  textCenter(100, 'GIF PLAYER', C.MAGENTA, 2);
+  textCenter(140, 'Check TFT Display', C.LIGHTGREY, 1);
+}
 function renderLoading() {
   clear();
   ctx.fillStyle = C.LIGHTGREY;
@@ -435,6 +441,7 @@ function renderPreview(j) {
     case 4: renderWeather(lines); break;
     case 5: renderClock(lines); break;
     case 6: renderSystem(lines); break;
+    case 7: renderGIF(); break;
     default: renderLoading();
   }
 }
@@ -644,6 +651,34 @@ async function rebootDevice() {
     await fetch("/api/reboot", { method: "POST" });
   } catch(e) {}
   setTimeout(() => location.reload(), 4000);
+}
+// ─── Upload GIF ───────────────────────────────────────────────────────────────
+async function uploadGIF() {
+  const fileInput = document.getElementById('gif-file');
+  const file = fileInput.files[0];
+  if (!file) { toast('Select a .gif file first'); return; }
+  if (file.size > 512 * 1024) { toast('File too large (Max 512KB)'); return; }
+  
+  const formData = new FormData();
+  formData.append('gif', file);
+
+  toast('Uploading...');
+  try {
+    const res = await fetch('/api/upload-gif', {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      toast('GIF Uploaded! Switching mode...');
+      fileInput.value = '';
+      setTimeout(updateStatus, 1500);
+    } else {
+      toast('Upload failed: ' + await res.text());
+    }
+  } catch (err) {
+    toast('Upload error');
+    console.error(err);
+  }
 }
 // ─── Init ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {

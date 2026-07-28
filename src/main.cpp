@@ -23,6 +23,8 @@ unsigned long lastUpdate    = 0;
 unsigned long lastModeCycle = 0;
 unsigned long lastSuccess   = 0;
 unsigned long lastInference = 0;
+int gifDelayMs = 100;
+volatile bool gifUploadPending = false;
 // ─── Setup ────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
@@ -82,7 +84,7 @@ void loop() {
   static unsigned long lastBtnPress = 0;
   if (c_btnPin >= 0 && c_btnPin <= 39 && digitalRead(c_btnPin) == LOW && (millis() - lastBtnPress > 400)) {
     lastBtnPress = millis();
-    int nextMode = (c_mode % 6) + 1;
+    int nextMode = (c_mode % 7) + 1;
     xSemaphoreTake(configMutex, portMAX_DELAY);
     mode = nextMode;
     c_mode = nextMode;
@@ -100,7 +102,7 @@ void loop() {
     unsigned long cycleIntervalMs = (unsigned long)max(1, c_cycleMins) * 60000UL;
     if (millis() - lastModeCycle >= cycleIntervalMs) {
       lastModeCycle = millis();
-      int nextMode = (c_mode % 6) + 1;
+      int nextMode = (c_mode % 7) + 1;
       xSemaphoreTake(configMutex, portMAX_DELAY);
       mode = nextMode;
       c_mode = nextMode;
@@ -114,8 +116,9 @@ void loop() {
 
   // 3. Regular refresh for current mode
   unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : 10000UL);
+  if (c_mode == 7) interval = gifDelayMs;
   if (millis() - lastUpdate > interval) {
-    Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
+    if (c_mode != 7) Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
     updateMode();
     lastUpdate = millis();
   }
