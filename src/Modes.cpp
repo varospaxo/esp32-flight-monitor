@@ -663,6 +663,9 @@ void modeWeather() {
   if (aqi >= 0) txt += "AQI           " + String(aqi) + " (" + aqiLabel(aqi) + ")";
   setPreview(txt);
 }
+static String lastDateStr = "";
+static String lastTzStr = "";
+
 void modeClock() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) { drawText("NTP SYNC..."); return; }
@@ -694,28 +697,37 @@ void modeClock() {
       }
   }
 
-  tftClear();
-  tft.fillRect(0, 0, 320, 22, TFT_CYAN);
-  tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.setTextSize(1);
-  tft.setTextDatum(TL_DATUM);
-  tft.drawString("CLOCK", 4, 7);
+  bool fullRedraw = (lastDrawnMode != 5) || (lastDateStr != String(dateBuf)) || (lastTzStr != (fullTz + c_timezone));
+
+  if (fullRedraw) {
+    tftClear();
+    tft.fillRect(0, 0, 320, 22, TFT_CYAN);
+    tft.setTextColor(TFT_BLACK, TFT_CYAN); tft.setTextSize(1);
+    tft.setTextDatum(TL_DATUM);
+    tft.drawString("CLOCK", 4, 7);
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
+    tft.setTextSize(3);
+    tft.drawString(dateBuf, 160, 140);
+
+    tft.setTextColor(TFT_WHITE, TFT_BLACK); 
+    tft.setTextSize(2);
+    tft.drawString(fullTz, 160, 180);
+
+    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
+    tft.setTextSize(2);
+    tft.drawString(c_timezone, 160, 210);
+
+    lastDrawnMode = 5;
+    lastDateStr = String(dateBuf);
+    lastTzStr = fullTz + c_timezone;
+  }
 
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(TFT_CYAN, TFT_BLACK); 
   tft.setTextSize(6);
   tft.drawString(timeBuf, 160, 80);
-
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
-  tft.setTextSize(3);
-  tft.drawString(dateBuf, 160, 140);
-
-  tft.setTextColor(TFT_WHITE, TFT_BLACK); 
-  tft.setTextSize(2);
-  tft.drawString(fullTz, 160, 180);
-
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
-  tft.setTextSize(2);
-  tft.drawString(c_timezone, 160, 210);
 
   tft.setTextDatum(TL_DATUM);
   setPreview("CLOCK\n" + String(timeBuf) + "\n" + String(dateBuf) + "\n" + fullTz + "\n" + c_timezone);

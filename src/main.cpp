@@ -19,8 +19,9 @@ volatile bool weatherOk = false;
 volatile bool updating    = false;
 volatile bool savePending = false;
 String        preview     = "";
-unsigned long lastUpdate  = 0;
-unsigned long lastSuccess = 0;
+unsigned long lastUpdate    = 0;
+unsigned long lastModeCycle = 0;
+unsigned long lastSuccess   = 0;
 unsigned long lastInference = 0;
 // ─── Setup ────────────────────────────────────────────────────────────────────
 void setup() {
@@ -36,6 +37,10 @@ void setup() {
   c_offset = tzOffset;
   xSemaphoreGive(configMutex);
   configTime(c_offset, 0, "pool.ntp.org", "time.nist.gov");
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
   tft.init();
   tft.setRotation(1);
   tftClear();
@@ -54,15 +59,60 @@ void setup() {
   Log.startServer();
   String ipStr = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "AP: 192.168.4.1";
   drawText("READY\nIP " + ipStr + "\nMode " + String(mode));
+  lastModeCycle = millis();
 }
 // ─── Loop (Core 1) ────────────────────────────────────────────────────────────
 void loop() {
   ElegantOTA.loop();
   Log.handleClient();
+
   int c_mode;
+  bool c_autoCycle;
+  int c_cycleMins;
+  int c_btnPin;
+
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_mode = mode;
+  c_autoCycle = autoCycle;
+  c_cycleMins = cycleMins;
+  c_btnPin = btnPin;
   xSemaphoreGive(configMutex);
+
+  // 1. Hardware button press handling (debounce 400ms)
+  static unsigned long lastBtnPress = 0;
+  if (c_btnPin >= 0 && c_btnPin <= 39 && digitalRead(c_btnPin) == LOW && (millis() - lastBtnPress > 400)) {
+    lastBtnPress = millis();
+    int nextMode = (c_mode % 6) + 1;
+    xSemaphoreTake(configMutex, portMAX_DELAY);
+    mode = nextMode;
+    c_mode = nextMode;
+    saveConfig();
+    xSemaphoreGive(configMutex);
+    lastModeCycle = millis();
+    Log.printf("Button press: switched to mode %d\n", c_mode);
+    updateMode();
+    lastUpdate = millis();
+  }
+
+  // 2. Auto-Cycle Modes feature
+  if (c_autoCycle) {
+    if (lastModeCycle == 0) lastModeCycle = millis();
+    unsigned long cycleIntervalMs = (unsigned long)max(1, c_cycleMins) * 60000UL;
+    if (millis() - lastModeCycle >= cycleIntervalMs) {
+      lastModeCycle = millis();
+      int nextMode = (c_mode % 6) + 1;
+      xSemaphoreTake(configMutex, portMAX_DELAY);
+      mode = nextMode;
+      c_mode = nextMode;
+      saveConfig();
+      xSemaphoreGive(configMutex);
+      Log.printf("Auto-cycle: switching to mode %d\n", c_mode);
+      updateMode();
+      lastUpdate = millis();
+    }
+  }
+
+  // 3. Regular refresh for current mode
   unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : 10000UL);
   if (millis() - lastUpdate > interval) {
     Log.printf("Loop: trigger refresh for mode %d\n", c_mode);

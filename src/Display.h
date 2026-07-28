@@ -3,6 +3,7 @@
 #include <TFT_eSPI.h>
 #include <TJpg_Decoder.h>
 extern TFT_eSPI tft;
+extern int lastDrawnMode;
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);
 void tftClear();
 void tftHeader(const char* title, uint16_t color);

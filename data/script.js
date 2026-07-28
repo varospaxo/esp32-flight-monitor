@@ -514,6 +514,8 @@ async function loadConfig() {
     if (document.getElementById('units')) document.getElementById('units').value = c.units || 0;
     if (document.getElementById('f-ground')) document.getElementById('f-ground').checked = c.f_ground || false;
     if (document.getElementById('f-glider')) document.getElementById('f-glider').checked = c.f_glider || false;
+    if (document.getElementById('auto-cycle')) document.getElementById('auto-cycle').checked = c.auto_cycle || false;
+    if (document.getElementById('cycle-mins')) document.getElementById('cycle-mins').value = c.cycle_mins || 1;
     if (document.getElementById('btn-pin')) document.getElementById('btn-pin').value = c.btn_pin !== undefined ? c.btn_pin : 0;
     currentMode = c.mode;
     highlightMode(currentMode);
@@ -561,6 +563,8 @@ async function saveConfig() {
     units: document.getElementById('units').value,
     f_ground: document.getElementById('f-ground').checked,
     f_glider: document.getElementById('f-glider').checked,
+    auto_cycle: document.getElementById('auto-cycle').checked,
+    cycle_mins: document.getElementById('cycle-mins').value,
     btn_pin: document.getElementById('btn-pin').value
   });
   try {
@@ -580,6 +584,8 @@ async function saveConfig() {
     if (saved.units !== undefined) document.getElementById('units').value = saved.units;
     if (saved.f_ground !== undefined) document.getElementById('f-ground').checked = saved.f_ground;
     if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;
+    if (saved.auto_cycle !== undefined) document.getElementById('auto-cycle').checked = saved.auto_cycle;
+    if (saved.cycle_mins !== undefined) document.getElementById('cycle-mins').value = saved.cycle_mins;
     if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;
     toast('Settings saved \u2713');
   } catch (e) {

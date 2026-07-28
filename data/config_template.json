@@ -10,6 +10,8 @@
   "units": 0,
   "f_ground": true,
   "f_glider": true,
+  "auto_cycle": false,
+  "cycle_mins": 1,
   "btn_pin": 0,
   "timezone": "Asia/Kolkata",
   "tzOffset": 19800

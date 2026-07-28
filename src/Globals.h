@@ -17,6 +17,7 @@ extern volatile bool savePending;
 // ─── Shared state ─────────────────────────────────────────────────────────────
 extern String preview;
 extern unsigned long lastUpdate;
+extern unsigned long lastModeCycle;
 extern unsigned long lastSuccess;
 extern unsigned long lastInference;
 #endif // GLOBALS_H

@@ -11,6 +11,8 @@ extern int mode;
 extern int units;         // 0: Imperial, 1: Metric
 extern bool filterGround;
 extern bool filterGliders;
+extern bool autoCycle;
+extern int  cycleMins;
 extern int btnPin;        // GPIO pin for mode button
 extern String timezone;
 extern long tzOffset;

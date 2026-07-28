@@ -10,6 +10,8 @@ int    mode     = 1;
 int    units    = 0; // 0: Imperial, 1: Metric
 bool   filterGround  = false;
 bool   filterGliders = false;
+bool   autoCycle     = false;
+int    cycleMins     = 1;
 int    btnPin   = 0; // Default to GPIO 0 (often BOOT button)
 String timezone = "Asia/Kolkata";
 long   tzOffset = 19800;
@@ -26,19 +28,21 @@ bool readJson(const char* path, JsonDocument& doc) {
 }
 bool saveConfig() {
   JsonDocument doc;
-  doc["wifi_ssid"] = ssid;  doc["wifi_pass"] = pass;
-  doc["mode"]      = mode;
-  doc["dash_user"] = dashUser; doc["dash_pass"] = dashPass;
-  doc["lat"]       = lat;
-  doc["lon"]       = lon;
-  doc["range_km"]  = range_km;
-  doc["units"]     = units;
-  doc["f_ground"]  = filterGround;
-  doc["f_glider"]  = filterGliders;
-  doc["btn_pin"]   = btnPin;
-  doc["timezone"]  = timezone;
-  doc["tzOffset"]  = tzOffset;
-  doc["tzAbbr"]    = tzAbbr;
+  doc["wifi_ssid"]  = ssid;  doc["wifi_pass"] = pass;
+  doc["mode"]       = mode;
+  doc["dash_user"]  = dashUser; doc["dash_pass"] = dashPass;
+  doc["lat"]        = lat;
+  doc["lon"]        = lon;
+  doc["range_km"]   = range_km;
+  doc["units"]      = units;
+  doc["f_ground"]   = filterGround;
+  doc["f_glider"]   = filterGliders;
+  doc["auto_cycle"] = autoCycle;
+  doc["cycle_mins"] = cycleMins;
+  doc["btn_pin"]    = btnPin;
+  doc["timezone"]   = timezone;
+  doc["tzOffset"]   = tzOffset;
+  doc["tzAbbr"]     = tzAbbr;
   const char* tmpPath = "/config_tmp.json";
   const char* dstPath = "/config.json";
   File f = LittleFS.open(tmpPath, "w");
@@ -56,7 +60,7 @@ bool saveConfig() {
     LittleFS.remove(tmpPath);
     return false;
   }
-  Log.printf("saveConfig OK: %u bytes  mode=%d\n", written, mode);
+  Log.printf("saveConfig OK: %u bytes  mode=%d autoCycle=%d cycleMins=%d\n", written, mode, autoCycle, cycleMins);
   return true;
 }
 void loadConfig() {
@@ -78,10 +82,12 @@ void loadConfig() {
   if (doc["units"].is<int>())             units    = doc["units"].as<int>();
   if (doc["f_ground"].is<bool>())         filterGround = doc["f_ground"].as<bool>();
   if (doc["f_glider"].is<bool>())         filterGliders = doc["f_glider"].as<bool>();
+  if (doc["auto_cycle"].is<bool>())       autoCycle = doc["auto_cycle"].as<bool>();
+  if (doc["cycle_mins"].is<int>())        cycleMins = doc["cycle_mins"].as<int>();
   if (doc["btn_pin"].is<int>())           btnPin   = doc["btn_pin"].as<int>();
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
   if (doc["tzAbbr"].is<const char*>())    tzAbbr = doc["tzAbbr"].as<String>();
   xSemaphoreGive(configMutex);
-  Log.printf("loadConfig: ssid=%s mode=%d\n", ssid.c_str(), mode);
+  Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d\n", ssid.c_str(), mode, autoCycle, cycleMins);
 }

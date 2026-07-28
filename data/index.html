@@ -73,6 +73,16 @@
           <input type="checkbox" id="f-glider"> Hide Gliders
         </label>
       </div>
+      <label>Auto-Cycle</label>
+      <div style="display:flex; align-items:center; gap:15px; grid-column: 2; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" id="auto-cycle"> Enable Auto-Cycle
+        </label>
+        <div style="display:flex; align-items:center; gap:5px; margin-left:auto;">
+          <label style="margin:0; font-size:0.9em; color:#bbb;">Cycle Time (mins):</label>
+          <input type="number" id="cycle-mins" min="1" max="60" placeholder="1" style="width:75px;">
+        </div>
+      </div>
       <label>Button Pin</label>
       <input type="number" id="btn-pin" min="-1" max="40" placeholder="0">
       <label>Timezone</label>
