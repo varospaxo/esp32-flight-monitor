@@ -523,6 +523,7 @@ async function loadConfig() {
     if (document.getElementById('f-glider')) document.getElementById('f-glider').checked = c.f_glider || false;
     if (document.getElementById('auto-cycle')) document.getElementById('auto-cycle').checked = c.auto_cycle || false;
     if (document.getElementById('cycle-mins')) document.getElementById('cycle-mins').value = c.cycle_mins || 1;
+    if (document.getElementById('cycle-modes')) document.getElementById('cycle-modes').value = c.cycle_modes || '1,2,3,4,5,6,7';
     if (document.getElementById('btn-pin')) document.getElementById('btn-pin').value = c.btn_pin !== undefined ? c.btn_pin : 0;
     currentMode = c.mode;
     highlightMode(currentMode);
@@ -572,6 +573,7 @@ async function saveConfig() {
     f_glider: document.getElementById('f-glider').checked,
     auto_cycle: document.getElementById('auto-cycle').checked,
     cycle_mins: document.getElementById('cycle-mins').value,
+    cycle_modes: document.getElementById('cycle-modes').value,
     btn_pin: document.getElementById('btn-pin').value
   });
   try {
@@ -593,6 +595,7 @@ async function saveConfig() {
     if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;
     if (saved.auto_cycle !== undefined) document.getElementById('auto-cycle').checked = saved.auto_cycle;
     if (saved.cycle_mins !== undefined) document.getElementById('cycle-mins').value = saved.cycle_mins;
+    if (saved.cycle_modes !== undefined) document.getElementById('cycle-modes').value = saved.cycle_modes;
     if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;
     toast('Settings saved \u2713');
   } catch (e) {

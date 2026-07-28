@@ -71,12 +71,14 @@ void loop() {
   int c_mode;
   bool c_autoCycle;
   int c_cycleMins;
+  String c_cycleModes;
   int c_btnPin;
 
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_mode = mode;
   c_autoCycle = autoCycle;
   c_cycleMins = cycleMins;
+  c_cycleModes = cycleModes;
   c_btnPin = btnPin;
   xSemaphoreGive(configMutex);
 
@@ -84,7 +86,7 @@ void loop() {
   static unsigned long lastBtnPress = 0;
   if (c_btnPin >= 0 && c_btnPin <= 39 && digitalRead(c_btnPin) == LOW && (millis() - lastBtnPress > 400)) {
     lastBtnPress = millis();
-    int nextMode = (c_mode % 7) + 1;
+    int nextMode = getNextCycleMode(c_mode, c_cycleModes);
     xSemaphoreTake(configMutex, portMAX_DELAY);
     mode = nextMode;
     c_mode = nextMode;
@@ -102,7 +104,7 @@ void loop() {
     unsigned long cycleIntervalMs = (unsigned long)max(1, c_cycleMins) * 60000UL;
     if (millis() - lastModeCycle >= cycleIntervalMs) {
       lastModeCycle = millis();
-      int nextMode = (c_mode % 7) + 1;
+      int nextMode = getNextCycleMode(c_mode, c_cycleModes);
       xSemaphoreTake(configMutex, portMAX_DELAY);
       mode = nextMode;
       c_mode = nextMode;

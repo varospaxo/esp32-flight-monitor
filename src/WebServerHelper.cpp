@@ -132,6 +132,7 @@ void setupServer() {
     doc["f_glider"]   = filterGliders;
     doc["auto_cycle"] = autoCycle;
     doc["cycle_mins"] = cycleMins;
+    doc["cycle_modes"] = cycleModes;
     doc["btn_pin"]    = btnPin;
     xSemaphoreGive(configMutex);
     String r; serializeJson(doc, r);
@@ -165,6 +166,7 @@ void setupServer() {
       int cm = req->getParam("cycle_mins", true)->value().toInt();
       cycleMins = cm > 0 ? cm : 1;
     }
+    if (req->hasParam("cycle_modes", true)) cycleModes = normalizeCycleModes(req->getParam("cycle_modes", true)->value());
     if (req->hasParam("btn_pin", true))    btnPin = req->getParam("btn_pin", true)->value().toInt();
     
     lastModeCycle = millis();
@@ -176,14 +178,14 @@ void setupServer() {
     bool ok = saveConfig();
     float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset; String r_abbr = tzAbbr;
     int r_units = units; bool r_f_ground = filterGround, r_f_glider = filterGliders;
-    bool r_auto_cycle = autoCycle; int r_cycle_mins = cycleMins; int r_btn_pin = btnPin;
+    bool r_auto_cycle = autoCycle; int r_cycle_mins = cycleMins; String r_cycle_modes = cycleModes; int r_btn_pin = btnPin;
     xSemaphoreGive(configMutex);
     savePending = false;
     if (!ok) { req->send(500, "application/json", "{\"error\":\"Failed to write config\"}"); return; }
     JsonDocument doc;
     doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off; doc["tzAbbr"] = r_abbr;
     doc["units"] = r_units; doc["f_ground"] = r_f_ground; doc["f_glider"] = r_f_glider;
-    doc["auto_cycle"] = r_auto_cycle; doc["cycle_mins"] = r_cycle_mins; doc["btn_pin"] = r_btn_pin;
+    doc["auto_cycle"] = r_auto_cycle; doc["cycle_mins"] = r_cycle_mins; doc["cycle_modes"] = r_cycle_modes; doc["btn_pin"] = r_btn_pin;
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });

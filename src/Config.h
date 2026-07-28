@@ -13,6 +13,7 @@ extern bool filterGround;
 extern bool filterGliders;
 extern bool autoCycle;
 extern int  cycleMins;
+extern String cycleModes;
 extern int btnPin;        // GPIO pin for mode button
 extern String timezone;
 extern long tzOffset;
@@ -22,4 +23,6 @@ extern String dashPass;
 void loadConfig();
 bool saveConfig();
 bool readJson(const char* path, JsonDocument& doc);
+String normalizeCycleModes(const String& raw);
+int getNextCycleMode(int currentMode, const String& rawModes);
 #endif // CONFIG_H

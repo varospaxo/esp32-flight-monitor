@@ -12,6 +12,7 @@ bool   filterGround  = false;
 bool   filterGliders = false;
 bool   autoCycle     = false;
 int    cycleMins     = 1;
+String cycleModes     = "1,2,3,4,5,6,7";
 int    btnPin   = 0; // Default to GPIO 0 (often BOOT button)
 String timezone = "Asia/Kolkata";
 long   tzOffset = 19800;
@@ -39,6 +40,7 @@ bool saveConfig() {
   doc["f_glider"]   = filterGliders;
   doc["auto_cycle"] = autoCycle;
   doc["cycle_mins"] = cycleMins;
+  doc["cycle_modes"] = cycleModes;
   doc["btn_pin"]    = btnPin;
   doc["timezone"]   = timezone;
   doc["tzOffset"]   = tzOffset;
@@ -84,10 +86,57 @@ void loadConfig() {
   if (doc["f_glider"].is<bool>())         filterGliders = doc["f_glider"].as<bool>();
   if (doc["auto_cycle"].is<bool>())       autoCycle = doc["auto_cycle"].as<bool>();
   if (doc["cycle_mins"].is<int>())        cycleMins = doc["cycle_mins"].as<int>();
+  if (doc["cycle_modes"].is<const char*>()) cycleModes = normalizeCycleModes(doc["cycle_modes"].as<String>());
   if (doc["btn_pin"].is<int>())           btnPin   = doc["btn_pin"].as<int>();
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
   if (doc["tzAbbr"].is<const char*>())    tzAbbr = doc["tzAbbr"].as<String>();
   xSemaphoreGive(configMutex);
-  Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d\n", ssid.c_str(), mode, autoCycle, cycleMins);
+  Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d cycleModes=%s\n", ssid.c_str(), mode, autoCycle, cycleMins, cycleModes.c_str());
+}
+
+String normalizeCycleModes(const String& raw) {
+  String modes = raw;
+  modes.replace(" ", "");
+  String result;
+  bool seen[8] = {false};
+  int start = 0;
+  for (int i = 0; i <= modes.length(); ++i) {
+    if (i == modes.length() || modes.charAt(i) == ',') {
+      String token = modes.substring(start, i);
+      start = i + 1;
+      if (token.length() == 0) continue;
+      int m = token.toInt();
+      if (m >= 1 && m <= 7 && !seen[m]) {
+        if (result.length() > 0) result += ",";
+        result += String(m);
+        seen[m] = true;
+      }
+    }
+  }
+  return result.length() > 0 ? result : String("1,2,3,4,5,6,7");
+}
+
+int getNextCycleMode(int currentMode, const String& rawModes) {
+  String modes = normalizeCycleModes(rawModes);
+  if (modes.length() == 0) return (currentMode % 7) + 1;
+  int selectedModes[7];
+  int count = 0;
+  int start = 0;
+  for (int i = 0; i <= modes.length(); ++i) {
+    if (i == modes.length() || modes.charAt(i) == ',') {
+      String token = modes.substring(start, i);
+      start = i + 1;
+      if (token.length() == 0) continue;
+      selectedModes[count++] = token.toInt();
+      if (count >= 7) break;
+    }
+  }
+  if (count == 0) return (currentMode % 7) + 1;
+  for (int i = 0; i < count; ++i) {
+    if (selectedModes[i] == currentMode) {
+      return (i + 1 < count) ? selectedModes[i + 1] : selectedModes[0];
+    }
+  }
+  return selectedModes[0];
 }
