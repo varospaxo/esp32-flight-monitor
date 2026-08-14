@@ -12,6 +12,7 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - **Mode 6: System Monitor**: WiFi status, API health, and system heap information.
 
 ## Screenshots
+
 ![TFT-SPI](https://github.com/user-attachments/assets/4412192b-1313-4715-8b49-02abb125c517)
 ![TFT SPI 2](https://github.com/user-attachments/assets/f93f7650-ed1c-4a59-a957-c62a7de65fe1)
 
@@ -21,6 +22,29 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - TFT Display (compatible with TFT_eSPI, e.g., ILI9341 320x240)
 - Internet connection via WiFi
 
+## Used Pinout (ESP32 + ST7789 + XPT2046)
+
+The current tested wiring uses a shared SPI bus for TFT and touch.
+
+| ESP32 GPIO | Signal       | Device               |
+| ---------- | ------------ | -------------------- |
+| 18         | SCLK / T_CLK | TFT + Touch (shared) |
+| 23         | MOSI / T_DIN | TFT + Touch (shared) |
+| 19         | T_DO (MISO)  | Touch                |
+| 15         | TFT_CS       | TFT                  |
+| 2          | TFT_DC       | TFT                  |
+| 4          | TFT_RST      | TFT                  |
+| 21         | TFT_BL       | TFT Backlight        |
+| 5          | TOUCH_CS     | Touch                |
+| 27         | TOUCH_IRQ    | Touch                |
+| 3V3        | VCC          | TFT + Touch          |
+| GND        | GND          | TFT + Touch          |
+
+Notes:
+
+- TFT MISO is not used for this ST7789 setup.
+- Touch controller is wired as SPI resistive touch (XPT2046 style).
+
 ## Software Infrastructure
 
 - **Asynchronous Web Server**: Configuration dashboard for settings and WiFi.
@@ -29,9 +53,9 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 
 ## Setup Instructions
 
-1.  **WiFi Configuration**: On the first boot, the ESP32 will start an Access Point named `ESP32-Radar`. Connect to it and navigate to `192.168.4.1` to configure your WiFi credentials.
-2.  **Dashboard**: Once connected to WiFi, access the web dashboard via the ESP32's IP address. Default credentials: `admin` / `admin`.
-3.  **Location**: Set your latitude, longitude, and range in the dashboard to get accurate local data.
+1. **WiFi Configuration**: On the first boot, the ESP32 will start an Access Point named `ESP32-Radar`. Connect to it and navigate to `192.168.4.1` to configure your WiFi credentials.
+2. **Dashboard**: Once connected to WiFi, access the web dashboard via the ESP32's IP address. Default credentials: `admin` / `admin`.
+3. **Location**: Set your latitude, longitude, and range in the dashboard to get accurate local data.
 
 ## Libraries Used
 
@@ -46,6 +70,7 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 ## Credits & Acknowledgements
 
 ### Source APIs
+
 - [ADSB.fi](https://adsb.fi/) – Real-time flight data.
 - [ADSB DB](https://adsbdb.com/) – Aircraft and flight route information.
 - [FlightRadar24](https://www.flightradar24.com/) – Airline logos.
@@ -54,7 +79,8 @@ A modular ESP32-based flight radar and weather monitor. This project displays re
 - [rzeldent/esp32-flightradar24-ttgo](https://github.com/rzeldent/esp32-flightradar24-ttgo) – Inspiration for the UI layout and features.
 
 ### 3D Printed Cases
-- **Case 1**: [2.8" TFT ili9341 SPI Case](https://www.thingiverse.com/thing:3461768) by AlexSk.
+
+- **Case 1**: [2.8&#34; TFT ili9341 SPI Case](https://www.thingiverse.com/thing:3461768) by AlexSk.
 - **Case 2**: [Housing Display TFT ILI9341](https://www.thingiverse.com/thing:6918515/) by rolfmobil.
 
 ## License
