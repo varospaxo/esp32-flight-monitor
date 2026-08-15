@@ -23,6 +23,7 @@ extern String dashPass;
 extern String customText;
 extern int customTextStyle;     // 0: Static, 1: Marquee
 extern int customTextDirection; // 0: Scroll Left, 1: Scroll Right
+extern bool telnetEnabled;      // Telnet logging server toggle (port 23)
 // Modes eligible for auto-cycle / cycle-mode buttons (8 and 9 are Settings/Network, not cycleable)
 #define NUM_CYCLE_MODES 8
 extern const int CYCLE_MODE_LIST[NUM_CYCLE_MODES];

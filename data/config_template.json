@@ -16,7 +16,9 @@
   "btn_pin": 0,
   "timezone": "Asia/Kolkata",
   "tzOffset": 19800,
+  "tzAbbr": "IST",
   "custom_text": "",
   "text_style": 0,
-  "text_direction": 0
+  "text_direction": 0,
+  "telnet_en": true
 }

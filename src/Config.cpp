@@ -22,6 +22,7 @@ String dashPass = "admin";
 String customText          = "";
 int    customTextStyle     = 0; // 0: Static, 1: Marquee
 int    customTextDirection = 0; // 0: Scroll Left, 1: Scroll Right
+bool   telnetEnabled       = true; // Default ON
 const int CYCLE_MODE_LIST[NUM_CYCLE_MODES] = {1, 2, 3, 4, 5, 6, 7, 10};
 bool readJson(const char* path, JsonDocument& doc) {
   File f = LittleFS.open(path, "r");
@@ -52,6 +53,7 @@ bool saveConfig() {
   doc["custom_text"]     = customText;
   doc["text_style"]      = customTextStyle;
   doc["text_direction"]  = customTextDirection;
+  doc["telnet_en"]       = telnetEnabled;
   const char* tmpPath = "/config_tmp.json";
   const char* dstPath = "/config.json";
   File f = LittleFS.open(tmpPath, "w");
@@ -104,8 +106,9 @@ void loadConfig() {
   if (doc["custom_text"].is<const char*>())    customText = doc["custom_text"].as<String>();
   if (doc["text_style"].is<int>())             customTextStyle = doc["text_style"].as<int>();
   if (doc["text_direction"].is<int>())         customTextDirection = doc["text_direction"].as<int>();
+  if (doc["telnet_en"].is<bool>())             telnetEnabled = doc["telnet_en"].as<bool>();
   xSemaphoreGive(configMutex);
-  Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d cycleModes=%s\n", ssid.c_str(), mode, autoCycle, cycleMins, cycleModes.c_str());
+  Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d cycleModes=%s telnet=%d\n", ssid.c_str(), mode, autoCycle, cycleMins, cycleModes.c_str(), (int)telnetEnabled);
 }
 
 static bool isValidCycleMode(int m) {

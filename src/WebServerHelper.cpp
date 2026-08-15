@@ -1,12 +1,17 @@
 #include "WebServerHelper.h"
 #include "Globals.h"
 #include "Config.h"
+#include "WiFiHelper.h"
 #include "FlightData.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
 AsyncWebServer server(80);
 bool checkAuth(AsyncWebServerRequest* req) {
+  // If device is in AP Mode (ESP32-Radar), allow unauthenticated access to web portal so users can configure WiFi
+  if (isAPMode) {
+    return true;
+  }
   String u, p;
   if (xSemaphoreTake(configMutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
     Log.println("checkAuth: mutex timeout!");
@@ -32,6 +37,31 @@ void setupServer() {
   server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->send(204);
   });
+
+  // ─── Captive Portal Handlers for AP Mode ────────────────────────────────────
+  auto handleCaptivePortal = [](AsyncWebServerRequest* req) {
+    if (isAPMode) {
+      AsyncWebServerResponse *response = req->beginResponse(302, "text/plain", "");
+      response->addHeader("Location", "http://192.168.4.1/");
+      req->send(response);
+      return;
+    }
+    req->send(404);
+  };
+
+  // Android / ChromeOS captive portal detection
+  server.on("/generate_204", HTTP_GET, handleCaptivePortal);
+  server.on("/gen_204", HTTP_GET, handleCaptivePortal);
+  // Apple iOS / macOS captive portal detection
+  server.on("/hotspot-detect.html", HTTP_GET, handleCaptivePortal);
+  // Windows captive portal detection
+  server.on("/ncsi.txt", HTTP_GET, handleCaptivePortal);
+  server.on("/connecttest.txt", HTTP_GET, handleCaptivePortal);
+  server.on("/redirect", HTTP_GET, handleCaptivePortal);
+  // Firefox captive portal detection
+  server.on("/canonical.html", HTTP_GET, handleCaptivePortal);
+  server.on("/success.txt", HTTP_GET, handleCaptivePortal);
+
   server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;
     String previewSnap;
@@ -39,11 +69,11 @@ void setupServer() {
     previewSnap = preview;
     xSemaphoreGive(previewMutex);
     JsonDocument doc;
-    doc["ip"]         = WiFi.localIP().toString();
-    doc["rssi"]       = WiFi.RSSI();
+    doc["ip"]         = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+    doc["rssi"]       = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0;
     doc["preview"]    = previewSnap;
     doc["heap"]       = ESP.getFreeHeap();
-    doc["ssid"]       = WiFi.SSID();
+    doc["ssid"]       = (WiFi.status() == WL_CONNECTED) ? WiFi.SSID() : "ESP32-Radar (AP)";
     doc["channel"]    = WiFi.channel();
     doc["adsb_ok"]    = (bool)adsbOk;
     doc["weather_ok"] = (bool)weatherOk;
@@ -56,6 +86,7 @@ void setupServer() {
     doc["tzAbbr"]     = tzAbbr;
     doc["lat"]        = lat;
     doc["lon"]        = lon;
+    doc["telnet_en"]  = telnetEnabled;
     xSemaphoreGive(configMutex);
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
@@ -137,6 +168,7 @@ void setupServer() {
     doc["custom_text"]    = customText;
     doc["text_style"]     = customTextStyle;
     doc["text_direction"] = customTextDirection;
+    doc["telnet_en"]      = telnetEnabled;
     xSemaphoreGive(configMutex);
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
@@ -150,6 +182,7 @@ void setupServer() {
     bool hasTz     = req->hasParam("timezone", true);
     bool hasOffset = req->hasParam("tzOffset", true);
     bool hasAbbr   = req->hasParam("tzAbbr", true);
+    bool oldTelnet = telnetEnabled;
     xSemaphoreTake(configMutex, portMAX_DELAY);
     if (hasLat) lat = strtof(req->getParam("lat", true)->value().c_str(), nullptr);
     if (hasLon) lon = strtof(req->getParam("lon", true)->value().c_str(), nullptr);
@@ -187,6 +220,9 @@ void setupServer() {
       int dir = req->getParam("text_direction", true)->value().toInt();
       customTextDirection = (dir == 1) ? 1 : 0;
     }
+    if (req->hasParam("telnet_en", true)) {
+      telnetEnabled = req->getParam("telnet_en", true)->value() == "true";
+    }
     
     lastModeCycle = millis();
 
@@ -199,16 +235,38 @@ void setupServer() {
     int r_units = units; bool r_f_ground = filterGround, r_f_glider = filterGliders;
     bool r_auto_cycle = autoCycle; int r_cycle_mins = cycleMins; String r_cycle_modes = cycleModes; int r_btn_pin = btnPin;
     String r_custom_text = customText; int r_text_style = customTextStyle; int r_text_direction = customTextDirection;
+    bool r_telnet_en = telnetEnabled;
     xSemaphoreGive(configMutex);
     savePending = false;
+
+    // Apply telnet server state change if toggled
+    if (r_telnet_en != oldTelnet) {
+      if (r_telnet_en) {
+        Log.startServer();
+      } else {
+        Log.stopServer();
+      }
+    }
+
     if (!ok) { req->send(500, "application/json", "{\"error\":\"Failed to write config\"}"); return; }
     JsonDocument doc;
     doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off; doc["tzAbbr"] = r_abbr;
     doc["units"] = r_units; doc["f_ground"] = r_f_ground; doc["f_glider"] = r_f_glider;
     doc["auto_cycle"] = r_auto_cycle; doc["cycle_mins"] = r_cycle_mins; doc["cycle_modes"] = r_cycle_modes; doc["btn_pin"] = r_btn_pin;
     doc["custom_text"] = r_custom_text; doc["text_style"] = r_text_style; doc["text_direction"] = r_text_direction;
+    doc["telnet_en"] = r_telnet_en;
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
+  });
+  // Catch-all handler for captive portal redirection when clients request random domains on AP mode
+  server.onNotFound([](AsyncWebServerRequest* req) {
+    if (isAPMode) {
+      AsyncWebServerResponse *response = req->beginResponse(302, "text/plain", "");
+      response->addHeader("Location", "http://192.168.4.1/");
+      req->send(response);
+      return;
+    }
+    req->send(404, "text/plain", "Not found");
   });
   server.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;

@@ -58,13 +58,20 @@ void setup() {
   else Log.printf("Invalid btnPin: %d, skipping pinMode\n", bPin);
   drawText("BOOTING...");
   setupServer();
-  Log.startServer();
+  bool c_telnet_en;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  c_telnet_en = telnetEnabled;
+  xSemaphoreGive(configMutex);
+  if (c_telnet_en) {
+    Log.startServer();
+  }
   String ipStr = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : "AP: 192.168.4.1";
   drawText("READY\nIP " + ipStr + "\nMode " + String(mode));
   lastModeCycle = millis();
 }
 // ─── Loop (Core 1) ────────────────────────────────────────────────────────────
 void loop() {
+  handleDNS();
   ElegantOTA.loop();
   Log.handleClient();
 

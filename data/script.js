@@ -323,22 +323,79 @@ function renderRadar(lines, rangeKm) {
 function renderWeather(lines) {
   clear();
   header(' WEATHER', C.GREEN);
-  let y = 26;
+  // Parse fields from preview text:
+  // lines format:
+  // lines[1] = "Temperature   28.5 C"
+  // lines[2] = "Humidity      65%"
+  // lines[3] = "Precipitation 0.0 mm"
+  // lines[4] = "UV Index      3"
+  // lines[5] = "Wind Speed    12.4 kph"
+  // lines[6] = "Wind Dir      180°"
+  // lines[7] = "Visibility    10 km"
+  // lines[8] = "AQI           42 (Good)"
+  let temp = '-- C', hum = '--%', precip = '-- mm', uv = '--', wind = '-- kph', windDir = '-- deg', vis = '-- km', aqi = 'N/A';
+  let aqiVal = -1;
+
   for (let i = 1; i < lines.length; i++) {
-    if (!lines[i]) continue;
-    const l = lines[i];
-    let color = C.WHITE;
-    // prefix matching must align with firmware output: 'Temperature  X', 'Humidity     X', etc.
-    if (l.startsWith('AQI')) {
-      const v = parseInt(l.match(/\d+/)?.[0] || '0');
-      color = v <= 50 ? C.GREEN : v <= 100 ? C.YELLOW : v <= 150 ? C.ORANGE : C.RED;
-    } else if (l.startsWith('Temperature')) color = '#ff8c42';
-    else if (l.startsWith('Humidity')) color = '#5bc8f5';
-    else if (l.startsWith('UV')) color = C.YELLOW;
-    else if (l.startsWith('Precipitation')) color = '#82cfff';
-    else if (l.startsWith('Wind')) color = '#82cfff';
-    else if (l.startsWith('Visibility')) color = '#ffffff';
-    text(4, y, l, color, 2); y += 22;
+    const l = (lines[i] || '').trim();
+    if (!l) continue;
+    if (l.startsWith('Temperature')) temp = l.replace(/^Temperature\s+/, '');
+    else if (l.startsWith('Humidity')) hum = l.replace(/^Humidity\s+/, '');
+    else if (l.startsWith('Precipitation')) precip = l.replace(/^Precipitation\s+/, '');
+    else if (l.startsWith('UV Index')) uv = l.replace(/^UV Index\s+/, '');
+    else if (l.startsWith('Wind Speed')) wind = l.replace(/^Wind Speed\s+/, '');
+    else if (l.startsWith('Wind Dir')) windDir = l.replace(/^Wind Dir\s+/, '').replace('°', ' deg');
+    else if (l.startsWith('Visibility')) vis = l.replace(/^Visibility\s+/, '');
+    else if (l.startsWith('AQI')) {
+      aqi = l.replace(/^AQI\s+/, '').replace('(', '').replace(')', '');
+      const m = l.match(/\d+/);
+      if (m) aqiVal = parseInt(m[0], 10);
+    }
+  }
+
+  let aqiColor = aqiVal > 150 ? C.RED : aqiVal > 100 ? C.ORANGE : aqiVal > 50 ? C.YELLOW : C.GREEN;
+  if (aqiVal < 0) aqiColor = C.WHITE;
+
+  const cells = [
+    { label: 'TEMPERATURE', lColor: C.YELLOW,  value: temp,    vColor: C.WHITE },
+    { label: 'HUMIDITY',    lColor: C.CYAN,    value: hum,     vColor: C.WHITE },
+    { label: 'WIND SPEED',  lColor: C.ORANGE,  value: wind,    vColor: C.WHITE },
+    { label: 'WIND DIR',    lColor: C.ORANGE,  value: windDir, vColor: C.WHITE },
+    { label: 'UV INDEX',    lColor: C.RED,     value: uv,      vColor: C.WHITE },
+    { label: 'PRECIP',      lColor: C.CYAN,    value: precip,  vColor: C.WHITE },
+    { label: 'VISIBILITY',  lColor: C.MAGENTA, value: vis,     vColor: C.WHITE },
+    { label: 'AQI',         lColor: aqiColor,  value: aqi,     vColor: aqiColor }
+  ];
+
+  const cellW = 160, cellH = 53;
+  for (let i = 0; i < 8; i++) {
+    const cx = (i % 2) * cellW;
+    const cy = 26 + Math.floor(i / 2) * cellH;
+
+    // Grid dividers
+    if (i > 0) {
+      if (i % 2 === 0) hline(0, cy, 320, C.DARKGREY);
+      if (i % 2 === 1) {
+        ctx.strokeStyle = C.DARKGREY;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(160 + 0.5, cy);
+        ctx.lineTo(160 + 0.5, cy + cellH);
+        ctx.stroke();
+      }
+    }
+
+    // Label (Text size 1 -> 8px)
+    ctx.font = '8px monospace';
+    ctx.fillStyle = cells[i].lColor;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(cells[i].label, cx + 4, cy + 6);
+
+    // Value (Text size 2 -> 16px)
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = cells[i].vColor;
+    ctx.fillText(cells[i].value, cx + 4, cy + 18);
   }
 }
 function renderClock(lines) {
@@ -572,6 +629,7 @@ async function loadConfig() {
     if (document.getElementById('custom-text')) document.getElementById('custom-text').value = c.custom_text || '';
     if (document.getElementById('text-style')) document.getElementById('text-style').value = c.text_style !== undefined ? c.text_style : 0;
     if (document.getElementById('text-direction')) document.getElementById('text-direction').value = c.text_direction !== undefined ? c.text_direction : 0;
+    if (document.getElementById('telnet-en')) document.getElementById('telnet-en').checked = c.telnet_en !== undefined ? c.telnet_en : true;
     onTextStyleChange();
     currentMode = c.mode;
     highlightMode(currentMode);
@@ -622,7 +680,8 @@ async function saveConfig() {
     auto_cycle: document.getElementById('auto-cycle').checked,
     cycle_mins: document.getElementById('cycle-mins').value,
     cycle_modes: getCycleModesCsv(),
-    btn_pin: document.getElementById('btn-pin').value
+    btn_pin: document.getElementById('btn-pin').value,
+    telnet_en: document.getElementById('telnet-en') ? document.getElementById('telnet-en').checked : true
   });
   try {
     const r = await fetch('/api/config/save', {
@@ -645,6 +704,7 @@ async function saveConfig() {
     if (saved.cycle_mins !== undefined) document.getElementById('cycle-mins').value = saved.cycle_mins;
     if (saved.cycle_modes !== undefined) setCycleModeCheckboxes(saved.cycle_modes);
     if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;
+    if (saved.telnet_en !== undefined && document.getElementById('telnet-en')) document.getElementById('telnet-en').checked = saved.telnet_en;
     toast('Settings saved \u2713');
   } catch (e) {
     toast('Save failed \u2014 check connection');

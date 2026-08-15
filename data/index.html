@@ -116,6 +116,12 @@
       <input type="number" id="btn-pin" min="-1" max="40" placeholder="0">
       <label>Timezone</label>
       <input type="text" id="timezone" placeholder="Asia/Kolkata" data-offset="19800">
+      <label>Telnet</label>
+      <div style="display:flex; align-items:center; gap:5px; grid-column: 2;">
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" id="telnet-en" checked> Enable Telnet Logging Server (Port 23)
+        </label>
+      </div>
     </div>
     <button id="save-cfg" class="btn btn-primary" onclick="saveConfig()">Save Settings</button>
   </section>
