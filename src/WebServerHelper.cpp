@@ -64,7 +64,7 @@ void setupServer() {
     if (!checkAuth(req)) return;
     if (!req->hasParam("m")) { req->send(400, "text/plain", "missing m"); return; }
     int m = req->getParam("m")->value().toInt();
-    if (m < 1 || m > 7)     { req->send(400, "text/plain", "m out of range"); return; }
+    if (m < 1 || m > 10 || m == 8 || m == 9) { req->send(400, "text/plain", "m out of range"); return; }
     xSemaphoreTake(configMutex, portMAX_DELAY);
     mode = m;
     saveConfig();
@@ -134,6 +134,9 @@ void setupServer() {
     doc["cycle_mins"] = cycleMins;
     doc["cycle_modes"] = cycleModes;
     doc["btn_pin"]    = btnPin;
+    doc["custom_text"]    = customText;
+    doc["text_style"]     = customTextStyle;
+    doc["text_direction"] = customTextDirection;
     xSemaphoreGive(configMutex);
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
@@ -168,6 +171,19 @@ void setupServer() {
     }
     if (req->hasParam("cycle_modes", true)) cycleModes = normalizeCycleModes(req->getParam("cycle_modes", true)->value());
     if (req->hasParam("btn_pin", true))    btnPin = req->getParam("btn_pin", true)->value().toInt();
+    if (req->hasParam("custom_text", true)) {
+      String txt = req->getParam("custom_text", true)->value();
+      if (txt.length() > 200) txt = txt.substring(0, 200); // cap to protect flash/heap
+      customText = txt;
+    }
+    if (req->hasParam("text_style", true)) {
+      int st = req->getParam("text_style", true)->value().toInt();
+      customTextStyle = (st == 1) ? 1 : 0;
+    }
+    if (req->hasParam("text_direction", true)) {
+      int dir = req->getParam("text_direction", true)->value().toInt();
+      customTextDirection = (dir == 1) ? 1 : 0;
+    }
     
     lastModeCycle = millis();
 
@@ -179,6 +195,7 @@ void setupServer() {
     float r_lat = lat, r_lon = lon; int r_range = range_km; String r_tz = timezone; long r_off = tzOffset; String r_abbr = tzAbbr;
     int r_units = units; bool r_f_ground = filterGround, r_f_glider = filterGliders;
     bool r_auto_cycle = autoCycle; int r_cycle_mins = cycleMins; String r_cycle_modes = cycleModes; int r_btn_pin = btnPin;
+    String r_custom_text = customText; int r_text_style = customTextStyle; int r_text_direction = customTextDirection;
     xSemaphoreGive(configMutex);
     savePending = false;
     if (!ok) { req->send(500, "application/json", "{\"error\":\"Failed to write config\"}"); return; }
@@ -186,6 +203,7 @@ void setupServer() {
     doc["lat"] = r_lat; doc["lon"] = r_lon; doc["range"] = r_range; doc["timezone"] = r_tz; doc["tzOffset"] = r_off; doc["tzAbbr"] = r_abbr;
     doc["units"] = r_units; doc["f_ground"] = r_f_ground; doc["f_glider"] = r_f_glider;
     doc["auto_cycle"] = r_auto_cycle; doc["cycle_mins"] = r_cycle_mins; doc["cycle_modes"] = r_cycle_modes; doc["btn_pin"] = r_btn_pin;
+    doc["custom_text"] = r_custom_text; doc["text_style"] = r_text_style; doc["text_direction"] = r_text_direction;
     String r; serializeJson(doc, r);
     req->send(200, "application/json", r);
   });

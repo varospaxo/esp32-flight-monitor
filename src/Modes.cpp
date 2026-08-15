@@ -939,13 +939,14 @@ int handleSettingsTouch(uint16_t tx, uint16_t ty) {
   int colX[3] = {SETT_COL0_X, SETT_COL1_X, SETT_COL2_X};
   int rowY[3] = {SETT_ROW0_Y, SETT_ROW1_Y, SETT_ROW2_Y};
 
-  for (int mode = 1; mode <= 7; mode++) {
-    int col = (mode - 1) % 3;
-    int row = (mode - 1) / 3;
+  for (int i = 0; i < NUM_CYCLE_MODES; i++) {
+    int m = CYCLE_MODE_LIST[i];
+    int col = i % 3;
+    int row = i / 3;
     if (x >= colX[col] && x < colX[col] + SETT_BTN_W &&
         y >= rowY[row] && y < rowY[row] + SETT_BTN_H) {
-      Log.printf("Settings: toggling mode %d\n", mode);
-      return 100 + mode;
+      Log.printf("Settings: toggling mode %d\n", m);
+      return 100 + m;
     }
   }
 
@@ -979,13 +980,14 @@ void modeSettings() {
   // 3-column mode buttons, coordinates match the #defines above
   int colX[3] = {SETT_COL0_X, SETT_COL1_X, SETT_COL2_X};
   int rowY[3] = {SETT_ROW0_Y, SETT_ROW1_Y, SETT_ROW2_Y};
-  const char* modeNames[] = {"FLIGHT", "AIRPORT", "MAP", "WEATHER", "CLOCK", "SYSTEM", "GIF"};
+  const char* modeNames[NUM_CYCLE_MODES] = {"FLIGHT", "AIRPORT", "MAP", "WEATHER", "CLOCK", "SYSTEM", "GIF", "TEXT"};
 
-  for (int mode = 1; mode <= 7; mode++) {
-    bool on = c_cycleModes.indexOf(String(mode)) != -1;
-    int col = (mode - 1) % 3;
-    int row = (mode - 1) / 3;
-    drawButton(colX[col], rowY[row], SETT_BTN_W, SETT_BTN_H, on, modeNames[mode - 1]);
+  for (int i = 0; i < NUM_CYCLE_MODES; i++) {
+    int m = CYCLE_MODE_LIST[i];
+    bool on = cycleModeEnabled(c_cycleModes, m);
+    int col = i % 3;
+    int row = i / 3;
+    drawButton(colX[col], rowY[row], SETT_BTN_W, SETT_BTN_H, on, modeNames[i]);
   }
 
   tft.setTextSize(1);
@@ -1105,6 +1107,120 @@ void modeNetworkInfo() {
   }
 }
 
+// ─── Custom Text Mode ──────────────────────────────────────────────────────
+static float marqueeX = 0;
+static String lastMarqueeText = "";
+static int lastMarqueeDir = -1;
+static int lastTextStyle = -1;
+static bool marqueeNeedsReset = false;
+
+// Word-wraps text to fit within the TFT width at the given text size, then
+// draws it centered (horizontally & vertically) in the area below the header.
+static void drawWrappedCenteredText(const String& text, int textSize, uint16_t color) {
+  tft.setTextSize(textSize);
+  tft.setTextColor(color, TFT_BLACK);
+  const int maxWidth = 300;
+  const int maxLines = 12;
+  String lines[maxLines];
+  int lineCount = 0;
+  String cur = "";
+  int start = 0;
+  int len = text.length();
+  for (int i = 0; i <= len; i++) {
+    if (i == len || text.charAt(i) == ' ') {
+      String word = text.substring(start, i);
+      start = i + 1;
+      if (word.length() == 0) continue;
+      String test = cur.length() ? cur + " " + word : word;
+      if (tft.textWidth(test) > maxWidth && cur.length() > 0) {
+        if (lineCount < maxLines) lines[lineCount++] = cur;
+        cur = word;
+      } else {
+        cur = test;
+      }
+    }
+  }
+  if (cur.length() > 0 && lineCount < maxLines) lines[lineCount++] = cur;
+  if (lineCount == 0) { lines[0] = text; lineCount = 1; }
+
+  int lineHeight = textSize * 8 + 6;
+  int totalHeight = lineCount * lineHeight;
+  int areaTop = 24, areaBottom = 236;
+  int y = areaTop + max(0, ((areaBottom - areaTop) - totalHeight) / 2);
+
+  tft.setTextDatum(MC_DATUM);
+  for (int i = 0; i < lineCount; i++) {
+    tft.drawString(lines[i], 160, y + lineHeight / 2);
+    y += lineHeight;
+  }
+  tft.setTextDatum(TL_DATUM);
+}
+
+void modeCustomText() {
+  String c_text; int c_style, c_dir;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  c_text = customText; c_style = customTextStyle; c_dir = customTextDirection;
+  xSemaphoreGive(configMutex);
+
+  if (c_text.length() == 0) c_text = "No text set.\nConfigure via Web Dashboard.";
+
+  if (c_style == 0) {
+    // Static: draw once, no need to redraw every refresh unless the text/style changed
+    if (lastDrawnMode != 10 || lastMarqueeText != c_text || lastTextStyle != c_style) {
+      tftClear();
+      tftHeader(" CUSTOM TEXT", TFT_MAGENTA);
+      drawWrappedCenteredText(c_text, 3, TFT_WHITE);
+      lastDrawnMode = 10;
+      lastMarqueeText = c_text;
+      lastTextStyle = c_style;
+    }
+  } else {
+    // Marquee: scroll continuously, resetting position whenever text/direction changes
+    bool changed = (lastDrawnMode != 10) || (c_text != lastMarqueeText) || (c_dir != lastMarqueeDir) || (c_style != lastTextStyle);
+    if (lastDrawnMode != 10) {
+      tftClear();
+      tftHeader(" CUSTOM TEXT", TFT_MAGENTA);
+    }
+    if (changed) {
+      tft.setTextSize(5);
+      int textW = tft.textWidth(c_text);
+      marqueeX = (c_dir == 0) ? 320 : -textW;
+      lastMarqueeText = c_text;
+      lastMarqueeDir = c_dir;
+      lastTextStyle = c_style;
+      marqueeNeedsReset = false;
+    }
+    lastDrawnMode = 10;
+
+    if (marqueeNeedsReset) {
+      tft.fillScreen(TFT_BLACK); // full reset once the text has scrolled fully off-screen (avoid tftClear(), which would clear lastDrawnMode too)
+      tftHeader(" CUSTOM TEXT", TFT_MAGENTA);
+      marqueeNeedsReset = false;
+    }
+
+    const int y = 92, rowH = 44;
+    tft.setTextSize(5);
+    int textW = tft.textWidth(c_text);
+    tft.fillRect(0, y - 2, 320, rowH, TFT_BLACK);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.setTextWrap(false); // text runs wider than the screen; wrapping to the next line caused ghosting
+    tft.setCursor((int)marqueeX, y);
+    tft.print(c_text);
+
+    const float speed = 4.0f;
+    if (c_dir == 0) { // flow right-to-left
+      marqueeX -= speed;
+      if (marqueeX < -textW) { marqueeX = 320; marqueeNeedsReset = true; }
+    } else {          // flow left-to-right
+      marqueeX += speed;
+      if (marqueeX > 320) { marqueeX = -textW; marqueeNeedsReset = true; }
+    }
+  }
+
+  setPreview("CUSTOM TEXT\n" + c_text + "\n" + String(c_style) + "\n" + String(c_dir));
+}
+
 void closeGIF() {
   if (gifFile) {
     gif.close();
@@ -1185,6 +1301,7 @@ void updateMode() {
     case 7: modeGIF();          break;
     case 8: modeSettings();     break;
     case 9: modeNetworkInfo();  break;
+    case 10: modeCustomText();  break;
     default: Log.printf("updateMode: unknown mode %d\n", c_mode);
   }
   updating = false;

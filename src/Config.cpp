@@ -19,6 +19,10 @@ long   tzOffset = 19800;
 String tzAbbr   = "IST";
 String dashUser = "admin";
 String dashPass = "admin";
+String customText          = "";
+int    customTextStyle     = 0; // 0: Static, 1: Marquee
+int    customTextDirection = 0; // 0: Scroll Left, 1: Scroll Right
+const int CYCLE_MODE_LIST[NUM_CYCLE_MODES] = {1, 2, 3, 4, 5, 6, 7, 10};
 bool readJson(const char* path, JsonDocument& doc) {
   File f = LittleFS.open(path, "r");
   if (!f) return false;
@@ -45,6 +49,9 @@ bool saveConfig() {
   doc["timezone"]   = timezone;
   doc["tzOffset"]   = tzOffset;
   doc["tzAbbr"]     = tzAbbr;
+  doc["custom_text"]     = customText;
+  doc["text_style"]      = customTextStyle;
+  doc["text_direction"]  = customTextDirection;
   const char* tmpPath = "/config_tmp.json";
   const char* dstPath = "/config.json";
   File f = LittleFS.open(tmpPath, "w");
@@ -91,15 +98,37 @@ void loadConfig() {
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
   if (doc["tzAbbr"].is<const char*>())    tzAbbr = doc["tzAbbr"].as<String>();
+  if (doc["custom_text"].is<const char*>())    customText = doc["custom_text"].as<String>();
+  if (doc["text_style"].is<int>())             customTextStyle = doc["text_style"].as<int>();
+  if (doc["text_direction"].is<int>())         customTextDirection = doc["text_direction"].as<int>();
   xSemaphoreGive(configMutex);
   Log.printf("loadConfig: ssid=%s mode=%d autoCycle=%d cycleMins=%d cycleModes=%s\n", ssid.c_str(), mode, autoCycle, cycleMins, cycleModes.c_str());
+}
+
+static bool isValidCycleMode(int m) {
+  for (int i = 0; i < NUM_CYCLE_MODES; i++) if (CYCLE_MODE_LIST[i] == m) return true;
+  return false;
+}
+
+// Token-exact membership check — plain String::indexOf() is unsafe here since
+// mode "1" is a textual substring of mode "10" in a comma-separated list.
+bool cycleModeEnabled(const String& rawModes, int m) {
+  int start = 0;
+  int len = rawModes.length();
+  for (int i = 0; i <= len; ++i) {
+    if (i == len || rawModes.charAt(i) == ',') {
+      if (rawModes.substring(start, i).toInt() == m) return true;
+      start = i + 1;
+    }
+  }
+  return false;
 }
 
 String normalizeCycleModes(const String& raw) {
   String modes = raw;
   modes.replace(" ", "");
   String result;
-  bool seen[8] = {false};
+  bool seen[11] = {false};
   int start = 0;
   for (int i = 0; i <= modes.length(); ++i) {
     if (i == modes.length() || modes.charAt(i) == ',') {
@@ -107,7 +136,7 @@ String normalizeCycleModes(const String& raw) {
       start = i + 1;
       if (token.length() == 0) continue;
       int m = token.toInt();
-      if (m >= 1 && m <= 7 && !seen[m]) {
+      if (m >= 1 && m <= 10 && isValidCycleMode(m) && !seen[m]) {
         if (result.length() > 0) result += ",";
         result += String(m);
         seen[m] = true;
@@ -119,8 +148,8 @@ String normalizeCycleModes(const String& raw) {
 
 int getNextCycleMode(int currentMode, const String& rawModes) {
   String modes = normalizeCycleModes(rawModes);
-  if (modes.length() == 0) return (currentMode % 7) + 1;
-  int selectedModes[7];
+  if (modes.length() == 0) return CYCLE_MODE_LIST[0];
+  int selectedModes[NUM_CYCLE_MODES];
   int count = 0;
   int start = 0;
   for (int i = 0; i <= modes.length(); ++i) {
@@ -129,10 +158,10 @@ int getNextCycleMode(int currentMode, const String& rawModes) {
       start = i + 1;
       if (token.length() == 0) continue;
       selectedModes[count++] = token.toInt();
-      if (count >= 7) break;
+      if (count >= NUM_CYCLE_MODES) break;
     }
   }
-  if (count == 0) return (currentMode % 7) + 1;
+  if (count == 0) return CYCLE_MODE_LIST[0];
   for (int i = 0; i < count; ++i) {
     if (selectedModes[i] == currentMode) {
       return (i + 1 < count) ? selectedModes[i + 1] : selectedModes[0];

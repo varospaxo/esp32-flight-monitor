@@ -73,6 +73,7 @@ void loop() {
   int c_cycleMins;
   String c_cycleModes;
   int c_btnPin;
+  int c_customTextStyle;
 
   xSemaphoreTake(configMutex, portMAX_DELAY);
   c_mode = mode;
@@ -80,6 +81,7 @@ void loop() {
   c_cycleMins = cycleMins;
   c_cycleModes = cycleModes;
   c_btnPin = btnPin;
+  c_customTextStyle = customTextStyle;
   xSemaphoreGive(configMutex);
 
   // 1. Hardware button press handling (debounce 400ms)
@@ -130,9 +132,11 @@ void loop() {
 
     } else if (swipe == SWIPE_RIGHT) {
       // Find previous mode in cycle list
-      int modeList[7]; int count = 0;
-      for (int m = 1; m <= 7; m++)
-        if (c_cycleModes.indexOf(String(m)) != -1) modeList[count++] = m;
+      int modeList[NUM_CYCLE_MODES]; int count = 0;
+      for (int i = 0; i < NUM_CYCLE_MODES; i++) {
+        int m = CYCLE_MODE_LIST[i];
+        if (cycleModeEnabled(c_cycleModes, m)) modeList[count++] = m;
+      }
       int prevMode = count > 0 ? modeList[count - 1] : c_mode; // default: wrap to last
       for (int i = 1; i < count; i++)
         if (modeList[i] == c_mode) { prevMode = modeList[i - 1]; break; }
@@ -170,21 +174,17 @@ void loop() {
         } else if (action >= 100) {
           int modeNum = action - 100;
           xSemaphoreTake(configMutex, portMAX_DELAY);
-          if (cycleModes.indexOf(String(modeNum)) != -1) {
-            cycleModes.replace(String(modeNum) + ",", "");
-            cycleModes.replace("," + String(modeNum), "");
-            cycleModes.replace(String(modeNum), "");
-          } else {
-            String newCycles = "";
-            for (int m = 1; m <= 7; m++) {
-              if (m == modeNum || cycleModes.indexOf(String(m)) != -1) {
-                if (newCycles.length() > 0) newCycles += ",";
-                newCycles += String(m);
-              }
+          bool currentlyOn = cycleModeEnabled(cycleModes, modeNum);
+          String newCycles = "";
+          for (int i = 0; i < NUM_CYCLE_MODES; i++) {
+            int m = CYCLE_MODE_LIST[i];
+            bool keep = (m == modeNum) ? !currentlyOn : cycleModeEnabled(cycleModes, m);
+            if (keep) {
+              if (newCycles.length() > 0) newCycles += ",";
+              newCycles += String(m);
             }
-            cycleModes = newCycles;
           }
-          cycleModes = normalizeCycleModes(cycleModes);
+          cycleModes = normalizeCycleModes(newCycles);
           saveConfig();
           xSemaphoreGive(configMutex);
           Log.printf("Mode %d toggled, cycles: %s\n", modeNum, cycleModes.c_str());
@@ -215,6 +215,7 @@ void loop() {
   // 3. Regular refresh for current mode
   unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : ((c_mode == 8 || c_mode == 9) ? 30000UL : 10000UL));
   if (c_mode == 7) interval = gifDelayMs;
+  if (c_mode == 10 && c_customTextStyle == 1) interval = 60UL; // marquee needs frequent redraws to animate
   if (millis() - lastUpdate > interval) {
     if (c_mode != 7) Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
     updateMode();

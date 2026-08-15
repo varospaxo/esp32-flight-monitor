@@ -391,6 +391,36 @@ function renderGIF() {
   textCenter(100, 'GIF PLAYER', C.MAGENTA, 2);
   textCenter(140, 'Check TFT Display', C.LIGHTGREY, 1);
 }
+function renderCustomText(lines) {
+  clear();
+  header(' CUSTOM TEXT', C.MAGENTA);
+  const txt = lines[1] || '';
+  const style = lines[2] || '0';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillStyle = style === '1' ? C.YELLOW : C.WHITE;
+  ctx.textBaseline = 'top';
+  if (style === '1') {
+    ctx.textAlign = 'left';
+    ctx.fillText(txt, 8, 92);
+  } else {
+    ctx.textAlign = 'center';
+    // Simple word-wrap for the preview canvas
+    const maxWidth = 300;
+    const words = txt.split(' ');
+    const wrapped = [];
+    let cur = '';
+    for (const w of words) {
+      const test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width > maxWidth && cur) { wrapped.push(cur); cur = w; }
+      else cur = test;
+    }
+    if (cur) wrapped.push(cur);
+    const lineH = 30;
+    let y = 24 + Math.max(0, (216 - wrapped.length * lineH) / 2);
+    wrapped.forEach(l => { ctx.fillText(l, W / 2, y); y += lineH; });
+    ctx.textAlign = 'left';
+  }
+}
 function renderLoading() {
   clear();
   ctx.fillStyle = C.LIGHTGREY;
@@ -442,6 +472,7 @@ function renderPreview(j) {
     case 5: renderClock(lines); break;
     case 6: renderSystem(lines); break;
     case 7: renderGIF(); break;
+    case 10: renderCustomText(lines); break;
     default: renderLoading();
   }
 }
@@ -496,6 +527,19 @@ function highlightMode(m) {
     b.classList.toggle('active', parseInt(b.dataset.m) === m);
   });
 }
+// ─── Cycle Mode Checkboxes ────────────────────────────────────────────────────
+function setCycleModeCheckboxes(csv) {
+  const enabled = (csv || '').split(',').map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('.cycle-mode-cb').forEach(cb => {
+    cb.checked = enabled.includes(cb.dataset.mode);
+  });
+}
+function getCycleModesCsv() {
+  return Array.from(document.querySelectorAll('.cycle-mode-cb'))
+    .filter(cb => cb.checked)
+    .map(cb => cb.dataset.mode)
+    .join(',');
+}
 // ─── Mode Switch ──────────────────────────────────────────────────────────────
 document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -523,8 +567,12 @@ async function loadConfig() {
     if (document.getElementById('f-glider')) document.getElementById('f-glider').checked = c.f_glider || false;
     if (document.getElementById('auto-cycle')) document.getElementById('auto-cycle').checked = c.auto_cycle || false;
     if (document.getElementById('cycle-mins')) document.getElementById('cycle-mins').value = c.cycle_mins || 1;
-    if (document.getElementById('cycle-modes')) document.getElementById('cycle-modes').value = c.cycle_modes || '1,2,3,4,5,6,7';
+    setCycleModeCheckboxes(c.cycle_modes || '1,2,3,4,5,6,7');
     if (document.getElementById('btn-pin')) document.getElementById('btn-pin').value = c.btn_pin !== undefined ? c.btn_pin : 0;
+    if (document.getElementById('custom-text')) document.getElementById('custom-text').value = c.custom_text || '';
+    if (document.getElementById('text-style')) document.getElementById('text-style').value = c.text_style !== undefined ? c.text_style : 0;
+    if (document.getElementById('text-direction')) document.getElementById('text-direction').value = c.text_direction !== undefined ? c.text_direction : 0;
+    onTextStyleChange();
     currentMode = c.mode;
     highlightMode(currentMode);
   } catch (e) {
@@ -573,7 +621,7 @@ async function saveConfig() {
     f_glider: document.getElementById('f-glider').checked,
     auto_cycle: document.getElementById('auto-cycle').checked,
     cycle_mins: document.getElementById('cycle-mins').value,
-    cycle_modes: document.getElementById('cycle-modes').value,
+    cycle_modes: getCycleModesCsv(),
     btn_pin: document.getElementById('btn-pin').value
   });
   try {
@@ -595,7 +643,7 @@ async function saveConfig() {
     if (saved.f_glider !== undefined) document.getElementById('f-glider').checked = saved.f_glider;
     if (saved.auto_cycle !== undefined) document.getElementById('auto-cycle').checked = saved.auto_cycle;
     if (saved.cycle_mins !== undefined) document.getElementById('cycle-mins').value = saved.cycle_mins;
-    if (saved.cycle_modes !== undefined) document.getElementById('cycle-modes').value = saved.cycle_modes;
+    if (saved.cycle_modes !== undefined) setCycleModeCheckboxes(saved.cycle_modes);
     if (saved.btn_pin !== undefined) document.getElementById('btn-pin').value = saved.btn_pin;
     toast('Settings saved \u2713');
   } catch (e) {
@@ -604,6 +652,31 @@ async function saveConfig() {
   }
   // Fetch fresh status so preview reflects new settings immediately
   setTimeout(updateStatus, 1800);
+}
+// ─── Custom Text ──────────────────────────────────────────────────────────────
+function onTextStyleChange() {
+  const isMarquee = document.getElementById('text-style').value === '1';
+  document.getElementById('text-direction').style.display = isMarquee ? '' : 'none';
+  document.getElementById('text-direction-label').style.display = isMarquee ? '' : 'none';
+}
+async function saveCustomText() {
+  const params = new URLSearchParams({
+    custom_text: document.getElementById('custom-text').value,
+    text_style: document.getElementById('text-style').value,
+    text_direction: document.getElementById('text-direction').value
+  });
+  try {
+    const r = await fetch('/api/config/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+    if (!r.ok) throw new Error('save failed');
+    toast('Custom text saved \u2713');
+    setTimeout(updateStatus, 1000);
+  } catch (e) {
+    toast('Save failed \u2014 check connection');
+  }
 }
 // ─── Auto-Locate ──────────────────────────────────────────────────────────────
 async function autoLocate() {

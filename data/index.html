@@ -29,6 +29,7 @@
       <button class="mode-btn" data-m="5" id="mb5">⏰ Clock</button>
       <button class="mode-btn" data-m="6" id="mb6">⚙ System</button>
       <button class="mode-btn" data-m="7" id="mb7">🎨 GIF</button>
+      <button class="mode-btn" data-m="10" id="mb10">📝 Text</button>
     </div>
   </section>
   <!-- Display Preview -->
@@ -85,7 +86,32 @@
         </div>
       </div>
       <label>Cycle Modes</label>
-      <input type="text" id="cycle-modes" placeholder="1,2,3,4,5,6,7" style="grid-column: 2;">
+      <div style="display:flex; gap:10px 15px; flex-wrap:wrap; grid-column: 2;">
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="1"> Flight
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="2"> Airport
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="3"> Map
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="4"> Weather
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="5"> Clock
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="6"> System
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="7"> GIF
+        </label>
+        <label style="display:flex; align-items:center; gap:5px; margin:0;">
+          <input type="checkbox" class="cycle-mode-cb" data-mode="10"> Text
+        </label>
+      </div>
       <label>Button Pin</label>
       <input type="number" id="btn-pin" min="-1" max="40" placeholder="0">
       <label>Timezone</label>
@@ -113,6 +139,25 @@
     </div>
     <div style="font-size:0.85em; color:#888; margin-bottom:10px; margin-top:5px;">Max size: 512KB.</div>
     <button class="btn btn-primary" onclick="uploadGIF()">Upload GIF</button>
+  </section>
+  <!-- Custom Text -->
+  <section class="card">
+    <h3>Custom Text</h3>
+    <div class="form-grid">
+      <label>Text</label>
+      <input type="text" id="custom-text" maxlength="200" placeholder="Enter text to display" style="grid-column: 2;">
+      <label>Display Style</label>
+      <select id="text-style" onchange="onTextStyleChange()">
+        <option value="0">Static (entire text at once)</option>
+        <option value="1">Marquee (scrolling)</option>
+      </select>
+      <label id="text-direction-label" style="display:none;">Scroll Direction</label>
+      <select id="text-direction" style="display:none;">
+        <option value="0">Right to Left</option>
+        <option value="1">Left to Right</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="saveCustomText()">Save Text</button>
   </section>
   <!-- WiFi -->
   <section class="card">
