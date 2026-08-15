@@ -1000,12 +1000,72 @@ void modeSettings() {
   setPreview(txt);
 }
 
+// Coordinates for Network Info action buttons (must match modeNetworkInfo draw positions)
+#define NET_FORGET_X   4
+#define NET_FORGET_Y   198
+#define NET_FORGET_W   150
+#define NET_FORGET_H   32
+#define NET_RESET_X    166
+#define NET_RESET_Y    198
+#define NET_RESET_W    150
+#define NET_RESET_H    32
+#define NET_CONFIRM_X  36
+#define NET_CONFIRM_Y  150
+#define NET_CONFIRM_W  110
+#define NET_CONFIRM_H  36
+#define NET_CANCEL_X   174
+#define NET_CANCEL_Y   150
+#define NET_CANCEL_W   110
+#define NET_CANCEL_H   36
+#define NET_CONFIRM_TIMEOUT_MS 6000UL
+
+// 0 = none, 1 = Forget WiFi armed, 2 = Factory Reset armed
+static int netPendingAction = 0;
+static unsigned long netArmedAt = 0;
+
 int handleNetworkTouch(uint16_t tx, uint16_t ty) {
-  // Network info is read-only, no touch handling needed
+  // x-axis is mirrored on this touch controller
+  uint16_t x = 320 - tx;
+  uint16_t y = ty;
+
+  // Auto-expire an armed confirmation so a stray later tap can't trigger it by mistake
+  if (netPendingAction != 0 && millis() - netArmedAt > NET_CONFIRM_TIMEOUT_MS) {
+    netPendingAction = 0;
+    return 3; // redraw normal screen
+  }
+
+  if (netPendingAction != 0) {
+    if (x >= NET_CONFIRM_X && x < NET_CONFIRM_X + NET_CONFIRM_W &&
+        y >= NET_CONFIRM_Y && y < NET_CONFIRM_Y + NET_CONFIRM_H) {
+      int action = (netPendingAction == 1) ? 11 : 12; // 11 = forget wifi confirmed, 12 = factory reset confirmed
+      netPendingAction = 0;
+      return action;
+    }
+    if (x >= NET_CANCEL_X && x < NET_CANCEL_X + NET_CANCEL_W &&
+        y >= NET_CANCEL_Y && y < NET_CANCEL_Y + NET_CANCEL_H) {
+      netPendingAction = 0;
+      return 3;
+    }
+    return 0; // ignore taps elsewhere while a confirmation is showing
+  }
+
+  if (x >= NET_FORGET_X && x < NET_FORGET_X + NET_FORGET_W &&
+      y >= NET_FORGET_Y && y < NET_FORGET_Y + NET_FORGET_H) {
+    netPendingAction = 1; netArmedAt = millis();
+    return 1;
+  }
+  if (x >= NET_RESET_X && x < NET_RESET_X + NET_RESET_W &&
+      y >= NET_RESET_Y && y < NET_RESET_Y + NET_RESET_H) {
+    netPendingAction = 2; netArmedAt = millis();
+    return 2;
+  }
   return 0;
 }
 
 void modeNetworkInfo() {
+  // Redraw with the confirmation cleared if it timed out since the last touch
+  if (netPendingAction != 0 && millis() - netArmedAt > NET_CONFIRM_TIMEOUT_MS) netPendingAction = 0;
+
   tftClear();
   tftHeader(" NETWORK INFO", TFT_GREEN);
   
@@ -1104,6 +1164,27 @@ void modeNetworkInfo() {
     tft.print("IP: 192.168.4.1");
     
     setPreview("NETWORK INFO\nNOT CONNECTED\nAP: ESP32-Radar\nIP: 192.168.4.1");
+  }
+
+  if (netPendingAction != 0) {
+    // Confirmation overlay — blocks all other taps until CONFIRM/CANCEL or timeout
+    const char* title = (netPendingAction == 1) ? "FORGET WIFI?" : "FACTORY RESET?";
+    const char* detail = (netPendingAction == 1) ? "Reboots into AP mode" : "Erases ALL settings";
+    tft.fillRect(0, 100, 320, 100, TFT_BLACK);
+    tft.drawRect(2, 100, 316, 100, TFT_RED);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.drawString(title, 160, 118);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.drawString(detail, 160, 138);
+    tft.setTextDatum(TL_DATUM);
+    drawButton(NET_CONFIRM_X, NET_CONFIRM_Y, NET_CONFIRM_W, NET_CONFIRM_H, true,  "CONFIRM");
+    drawButton(NET_CANCEL_X,  NET_CANCEL_Y,  NET_CANCEL_W,  NET_CANCEL_H,  false, "CANCEL");
+  } else {
+    drawButton(NET_FORGET_X, NET_FORGET_Y, NET_FORGET_W, NET_FORGET_H, false, "FORGET WIFI");
+    drawButton(NET_RESET_X,  NET_RESET_Y,  NET_RESET_W,  NET_RESET_H,  false, "FACTORY RESET");
   }
 }
 

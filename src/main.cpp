@@ -184,11 +184,43 @@ void loop() {
               newCycles += String(m);
             }
           }
-          cycleModes = normalizeCycleModes(newCycles);
-          saveConfig();
+          String normalized = normalizeCycleModes(newCycles);
+          if (normalized.length() > 0) {
+            cycleModes = normalized;
+            saveConfig();
+          } else {
+            Log.println("Ignoring toggle: at least one cycle mode must stay enabled");
+          }
           xSemaphoreGive(configMutex);
           Log.printf("Mode %d toggled, cycles: %s\n", modeNum, cycleModes.c_str());
           updateMode(); lastUpdate = millis();
+        }
+      } else if (c_mode == 9) {
+        int action = handleNetworkTouch(touchStart.x, touchStart.y);
+        if (action == 1) {
+          Log.println("Network info: Forget WiFi armed, awaiting confirmation");
+          updateMode(); lastUpdate = millis();
+        } else if (action == 2) {
+          Log.println("Network info: Factory Reset armed, awaiting confirmation");
+          updateMode(); lastUpdate = millis();
+        } else if (action == 3) {
+          Log.println("Network info: confirmation cancelled/expired");
+          updateMode(); lastUpdate = millis();
+        } else if (action == 11) {
+          Log.println("Network info: Forget WiFi CONFIRMED, clearing credentials and rebooting");
+          xSemaphoreTake(configMutex, portMAX_DELAY);
+          ssid = ""; pass = "";
+          bool ok = saveConfig();
+          xSemaphoreGive(configMutex);
+          drawText(ok ? "WIFI FORGOTTEN\nREBOOTING..." : "SAVE FAILED");
+          delay(800);
+          if (ok) ESP.restart();
+        } else if (action == 12) {
+          Log.println("Network info: Factory Reset CONFIRMED, wiping config and rebooting");
+          drawText("FACTORY RESET\nREBOOTING...");
+          LittleFS.remove("/config.json");
+          delay(800);
+          ESP.restart();
         }
       }
     }

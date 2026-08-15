@@ -547,7 +547,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
     await fetch('/api/mode?m=' + m);
     currentMode = parseInt(m);
     highlightMode(currentMode);
-    toast('Mode ' + m + ' set');
+    toast(btn.textContent.trim() + ' mode set');
     setTimeout(updateStatus, 1500);
   });
 });
@@ -727,6 +727,40 @@ async function rebootDevice() {
     await fetch("/api/reboot", { method: "POST" });
   } catch(e) {}
   setTimeout(() => location.reload(), 4000);
+}
+// ─── Forget WiFi ──────────────────────────────────────────────────────────────
+async function forgetWifi() {
+  if (!confirm('Forget saved WiFi credentials and reboot into AP mode (ESP32-Radar)?\nYou will need to reconnect via WiFi to reconfigure.')) return;
+  toast('Forgetting WiFi...');
+  try {
+    const r = await fetch('/api/forget-wifi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'confirm=yes'
+    });
+    if (!r.ok) throw new Error('failed');
+    toast('WiFi forgotten — rebooting...');
+  } catch (e) {
+    toast('Forget WiFi failed');
+  }
+}
+// ─── Factory Reset ────────────────────────────────────────────────────────────
+async function factoryReset() {
+  if (!confirm('This will ERASE ALL settings (WiFi, location, credentials, cycle modes, custom text) and reboot. Continue?')) return;
+  const typed = prompt('Type RESET (all caps) to confirm factory reset:');
+  if (typed !== 'RESET') { toast('Factory reset cancelled'); return; }
+  toast('Factory resetting...');
+  try {
+    const r = await fetch('/api/factory-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'confirm=yes'
+    });
+    if (!r.ok) throw new Error('failed');
+    toast('Factory reset — rebooting...');
+  } catch (e) {
+    toast('Factory reset failed');
+  }
 }
 // ─── Upload GIF ───────────────────────────────────────────────────────────────
 async function uploadGIF() {

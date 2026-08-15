@@ -169,7 +169,10 @@ void setupServer() {
       int cm = req->getParam("cycle_mins", true)->value().toInt();
       cycleMins = cm > 0 ? cm : 1;
     }
-    if (req->hasParam("cycle_modes", true)) cycleModes = normalizeCycleModes(req->getParam("cycle_modes", true)->value());
+    if (req->hasParam("cycle_modes", true)) {
+      String normalized = normalizeCycleModes(req->getParam("cycle_modes", true)->value());
+      if (normalized.length() > 0) cycleModes = normalized; // ignore attempts to leave zero modes enabled
+    }
     if (req->hasParam("btn_pin", true))    btnPin = req->getParam("btn_pin", true)->value().toInt();
     if (req->hasParam("custom_text", true)) {
       String txt = req->getParam("custom_text", true)->value();
@@ -218,6 +221,32 @@ void setupServer() {
     xSemaphoreGive(configMutex);
     req->send(ok ? 200 : 500, "text/plain", ok ? "saved, rebooting" : "save failed");
     if (ok) { delay(500); ESP.restart(); }
+  });
+  // Destructive: requires an explicit confirm=yes body param, in addition to the browser-side confirm dialog
+  server.on("/api/forget-wifi", HTTP_POST, [](AsyncWebServerRequest* req) {
+    if (!checkAuth(req)) return;
+    if (!req->hasParam("confirm", true) || req->getParam("confirm", true)->value() != "yes") {
+      req->send(400, "text/plain", "confirmation required"); return;
+    }
+    xSemaphoreTake(configMutex, portMAX_DELAY);
+    ssid = ""; pass = "";
+    bool ok = saveConfig();
+    xSemaphoreGive(configMutex);
+    Log.println("/api/forget-wifi: credentials cleared");
+    req->send(ok ? 200 : 500, "text/plain", ok ? "wifi forgotten, rebooting" : "save failed");
+    if (ok) { delay(500); ESP.restart(); }
+  });
+  // Destructive: wipes /config.json entirely, restoring compiled-in defaults on next boot
+  server.on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest* req) {
+    if (!checkAuth(req)) return;
+    if (!req->hasParam("confirm", true) || req->getParam("confirm", true)->value() != "yes") {
+      req->send(400, "text/plain", "confirmation required"); return;
+    }
+    Log.println("/api/factory-reset: wiping config");
+    LittleFS.remove("/config.json");
+    req->send(200, "text/plain", "factory reset, rebooting");
+    delay(500);
+    ESP.restart();
   });
   server.on("/api/credentials", HTTP_GET, [](AsyncWebServerRequest* req) {
     if (!checkAuth(req)) return;

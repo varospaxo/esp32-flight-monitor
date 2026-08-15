@@ -168,7 +168,10 @@
       <label>Password</label>
       <input type="password" id="wifi-pass" placeholder="Password">
     </div>
-    <button class="btn btn-warn" onclick="saveWifi()">Save & Reboot</button>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-warn" onclick="saveWifi()">Save & Reboot</button>
+      <button class="btn btn-warn" onclick="forgetWifi()">Forget WiFi</button>
+    </div>
   </section>
   <!-- System Info -->
   <section class="card card-sm">
@@ -185,6 +188,7 @@
     <div class="sys-links">
       <a href="/update" class="btn btn-sm">OTA Update</a>
       <button onclick="rebootDevice()" class="btn btn-sm btn-warn">Reboot Device</button>
+      <button onclick="factoryReset()" class="btn btn-sm btn-warn">Factory Reset</button>
     </div>
   </section>
 </main>

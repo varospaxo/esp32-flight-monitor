@@ -93,7 +93,10 @@ void loadConfig() {
   if (doc["f_glider"].is<bool>())         filterGliders = doc["f_glider"].as<bool>();
   if (doc["auto_cycle"].is<bool>())       autoCycle = doc["auto_cycle"].as<bool>();
   if (doc["cycle_mins"].is<int>())        cycleMins = doc["cycle_mins"].as<int>();
-  if (doc["cycle_modes"].is<const char*>()) cycleModes = normalizeCycleModes(doc["cycle_modes"].as<String>());
+  if (doc["cycle_modes"].is<const char*>()) {
+    String nm = normalizeCycleModes(doc["cycle_modes"].as<String>());
+    cycleModes = nm.length() > 0 ? nm : String("1,2,3,4,5,6,7"); // corrupted/empty config file -> sane default
+  }
   if (doc["btn_pin"].is<int>())           btnPin   = doc["btn_pin"].as<int>();
   if (doc["timezone"].is<const char*>())  timezone = doc["timezone"].as<String>();
   if (doc["tzOffset"].is<long>())         tzOffset = doc["tzOffset"].as<long>();
@@ -143,7 +146,9 @@ String normalizeCycleModes(const String& raw) {
       }
     }
   }
-  return result.length() > 0 ? result : String("1,2,3,4,5,6,7");
+  // Returns "" (not a hardcoded default) when no valid tokens remain — callers decide how
+  // to handle an empty result, since silently re-enabling modes would surprise the user.
+  return result;
 }
 
 int getNextCycleMode(int currentMode, const String& rawModes) {

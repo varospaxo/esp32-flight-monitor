@@ -78,7 +78,7 @@ void drawButton(int x, int y, int w, int h, bool pressed, const char* label) {
   tft.drawRect(x, y, w, h, borderColor);
 
   // Use size 2 for bigger buttons, size 1 for small ones
-  tft.setTextSize(h >= 30 ? 2 : 1);
+  tft.setTextSize(h >= 34 ? 2 : 1);
   tft.setTextColor(textColor, fillColor);
   tft.setTextDatum(MC_DATUM);
   tft.drawString(label, x + w / 2, y + h / 2);
