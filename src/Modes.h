@@ -8,6 +8,10 @@ void modeWeather();
 void modeClock();
 void modeSystem();
 void modeGIF();
+void modeSettings();
+void modeNetworkInfo();
+int handleSettingsTouch(uint16_t tx, uint16_t ty);
+int handleNetworkTouch(uint16_t tx, uint16_t ty);
 void closeGIF();
 void updateMode();
 #endif // MODES_H

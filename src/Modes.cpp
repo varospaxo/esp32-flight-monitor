@@ -732,20 +732,43 @@ void modeWeather() {
     }
   }
   http2.end();
+  
   tftClear(); tftHeader(" WEATHER", 0x07E0);
-  int y = 30; tft.setTextSize(2); tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setCursor(4,y); tft.printf("Temp   %.1f C", temp);    y+=20;
-  tft.setCursor(4,y); tft.printf("Humid  %d%%",  humidity);  y+=20;
-  tft.setCursor(4,y); tft.printf("Precip %.1f mm", rain);      y+=20;
-  tft.setCursor(4,y); tft.printf("UV     %d",    uv);        y+=20;
-  tft.setCursor(4,y); tft.printf("Wind   %.1f kph", wind); y+=20;
-  tft.setCursor(4,y); tft.printf("WDir   %d°", (int)windDir); y+=20;
-  tft.setCursor(4,y); tft.printf("Vis    %d km", visibility / 1000); y+=20;
-  if (aqi >= 0) {
-    uint16_t aqiColor = aqi > 150 ? TFT_RED : aqi > 100 ? TFT_ORANGE : aqi > 50 ? TFT_YELLOW : TFT_GREEN;
-    tft.setTextColor(aqiColor, TFT_BLACK);
-    tft.setCursor(4,y); tft.printf("AQI    %d (%s)", aqi, aqiLabel(aqi).c_str());
+
+  // Each cell: 160px wide, 44px tall, label at top, value below
+  // Layout: 2 cols x 4 rows starting at y=26
+  // Col 0 x=0, Col 1 x=160
+  // Rows y = 26, 70, 114, 158
+  struct WCell { String label; uint16_t lColor; String value; uint16_t vColor; } cells[8];
+  cells[0] = {"TEMPERATURE", TFT_YELLOW,  String(temp, 1) + " C",                   TFT_WHITE};
+  cells[1] = {"HUMIDITY",    TFT_CYAN,    String(humidity) + "%",                    TFT_WHITE};
+  cells[2] = {"WIND SPEED",  TFT_ORANGE,  String(wind, 1) + " kph",                 TFT_WHITE};
+  cells[3] = {"WIND DIR",    TFT_ORANGE,  String((int)windDir) + " deg",             TFT_WHITE};
+  cells[4] = {"UV INDEX",    TFT_RED,     String(uv),                                TFT_WHITE};
+  cells[5] = {"PRECIP",      TFT_CYAN,    String(rain, 1) + " mm",                  TFT_WHITE};
+  cells[6] = {"VISIBILITY",  TFT_MAGENTA, String(visibility / 1000) + " km",        TFT_WHITE};
+  uint16_t aqiColor = aqi > 150 ? TFT_RED : aqi > 100 ? TFT_ORANGE : aqi > 50 ? TFT_YELLOW : TFT_GREEN;
+  cells[7] = {"AQI",         aqiColor,    aqi >= 0 ? String(aqi) + " " + aqiLabel(aqi) : "N/A", aqiColor};
+
+  // 4 rows × 2 cols fills 240-26 = 214px → 53px per row with natural top/bottom padding
+  const int cellW = 160, cellH = 53;
+  for (int i = 0; i < 8; i++) {
+    int cx = (i % 2) * cellW;
+    int cy = 26 + (i / 2) * cellH;
+    if (i > 0) {
+      if (i % 2 == 0) tft.drawFastHLine(0, cy, 320, TFT_DARKGREY);
+      if (i % 2 == 1) tft.drawFastVLine(160, cy, cellH, TFT_DARKGREY);
+    }
+    tft.setTextSize(1);
+    tft.setTextColor(cells[i].lColor, TFT_BLACK);
+    tft.setCursor(cx + 4, cy + 6);
+    tft.print(cells[i].label.c_str());
+    tft.setTextSize(2);
+    tft.setTextColor(cells[i].vColor, TFT_BLACK);
+    tft.setCursor(cx + 4, cy + 18);
+    tft.print(cells[i].value);
   }
+  
   String txt = "WEATHER\n";
   txt += "Temperature   " + String(temp,1) + " C\n";
   txt += "Humidity      " + String(humidity) + "%\n";
@@ -886,6 +909,202 @@ void modeSystem() {
   txt += "Heap: " + String(ESP.getFreeHeap()/1024) + " KB";
   setPreview(txt);
 }
+
+// Coordinates for Settings buttons (must match modeSettings draw positions)
+#define SETT_AUTOCYCLE_X  4
+#define SETT_AUTOCYCLE_Y  26
+#define SETT_AUTOCYCLE_W  150
+#define SETT_AUTOCYCLE_H  30
+#define SETT_BTN_W        96
+#define SETT_BTN_H        34
+#define SETT_COL0_X       4
+#define SETT_COL1_X       112
+#define SETT_COL2_X       220
+#define SETT_ROW0_Y       74
+#define SETT_ROW1_Y       114
+#define SETT_ROW2_Y       154
+
+int handleSettingsTouch(uint16_t tx, uint16_t ty) {
+  // x-axis is mirrored on this touch controller
+  uint16_t x = 320 - tx;
+  uint16_t y = ty;
+
+  Log.printf("Settings touch raw=(%d,%d) cal=(%d,%d)\n", tx, ty, x, y);
+
+  if (x >= SETT_AUTOCYCLE_X && x < SETT_AUTOCYCLE_X + SETT_AUTOCYCLE_W &&
+      y >= SETT_AUTOCYCLE_Y && y < SETT_AUTOCYCLE_Y + SETT_AUTOCYCLE_H) {
+    return 1;
+  }
+
+  int colX[3] = {SETT_COL0_X, SETT_COL1_X, SETT_COL2_X};
+  int rowY[3] = {SETT_ROW0_Y, SETT_ROW1_Y, SETT_ROW2_Y};
+
+  for (int mode = 1; mode <= 7; mode++) {
+    int col = (mode - 1) % 3;
+    int row = (mode - 1) / 3;
+    if (x >= colX[col] && x < colX[col] + SETT_BTN_W &&
+        y >= rowY[row] && y < rowY[row] + SETT_BTN_H) {
+      Log.printf("Settings: toggling mode %d\n", mode);
+      return 100 + mode;
+    }
+  }
+
+  return 0;
+}
+
+void modeSettings() {
+  tftClear();
+  tftHeader(" SETTINGS", TFT_MAGENTA);
+
+  bool c_autoCycle;
+  String c_cycleModes;
+  xSemaphoreTake(configMutex, portMAX_DELAY);
+  c_autoCycle = autoCycle;
+  c_cycleModes = cycleModes;
+  xSemaphoreGive(configMutex);
+
+  // Auto-cycle wide button
+  drawButton(SETT_AUTOCYCLE_X, SETT_AUTOCYCLE_Y, SETT_AUTOCYCLE_W, SETT_AUTOCYCLE_H,
+             c_autoCycle, c_autoCycle ? "AUTO: ON" : "AUTO: OFF");
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.setCursor(162, 36);
+  tft.printf("%d min interval", max(1, cycleMins));
+
+  // "Modes:" label
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.setCursor(4, 62);
+  tft.print("Cycle modes:");
+
+  // 3-column mode buttons, coordinates match the #defines above
+  int colX[3] = {SETT_COL0_X, SETT_COL1_X, SETT_COL2_X};
+  int rowY[3] = {SETT_ROW0_Y, SETT_ROW1_Y, SETT_ROW2_Y};
+  const char* modeNames[] = {"FLIGHT", "AIRPORT", "MAP", "WEATHER", "CLOCK", "SYSTEM", "GIF"};
+
+  for (int mode = 1; mode <= 7; mode++) {
+    bool on = c_cycleModes.indexOf(String(mode)) != -1;
+    int col = (mode - 1) % 3;
+    int row = (mode - 1) / 3;
+    drawButton(colX[col], rowY[row], SETT_BTN_W, SETT_BTN_H, on, modeNames[mode - 1]);
+  }
+
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.setCursor(4, 196);
+  tft.print("Tap to toggle  |  Swipe to exit");
+
+  String txt = "SETTINGS\nAuto-Cycle: " + String(c_autoCycle ? "ON" : "OFF") + "\n";
+  txt += "Enabled Modes: " + c_cycleModes;
+  setPreview(txt);
+}
+
+int handleNetworkTouch(uint16_t tx, uint16_t ty) {
+  // Network info is read-only, no touch handling needed
+  return 0;
+}
+
+void modeNetworkInfo() {
+  tftClear();
+  tftHeader(" NETWORK INFO", TFT_GREEN);
+  
+  int y = 30;
+  
+  // WiFi Status
+  tft.setTextSize(2);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.setCursor(4, y);
+  tft.print("WiFi:");
+  y += 22;
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("Network Name:");
+    y += 12;
+    
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.setCursor(4, y);
+    String ssidStr = WiFi.SSID();
+    if (ssidStr.length() > 16) ssidStr = ssidStr.substring(0, 16) + "...";
+    tft.print(ssidStr);
+    y += 24;
+    
+    // Signal strength
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(4, y);
+    int rssi = WiFi.RSSI();
+    tft.printf("Signal: %d dBm", rssi);
+    y += 14;
+    
+    // Draw signal bars
+    int bars = rssi > -50 ? 4 : rssi > -60 ? 3 : rssi > -70 ? 2 : rssi > -80 ? 1 : 0;
+    for (int i = 0; i < 4; i++) {
+      tft.setTextColor(i < bars ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+      tft.setCursor(200 + i * 8, y - 4);
+      tft.print("|");
+    }
+    y += 14;
+    
+    y += 8;
+    
+    // LAN IP
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("IP Address:");
+    y += 22;
+    
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("LAN:");
+    y += 12;
+    
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print(WiFi.localIP().toString());
+    y += 22;
+    
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.printf("GW: %s", WiFi.gatewayIP().toString().c_str());
+    
+    String txt = "NETWORK INFO\n";
+    txt += "WiFi Network: " + WiFi.SSID() + "\n";
+    txt += "Signal: " + String(rssi) + " dBm\n";
+    txt += "LAN IP: " + WiFi.localIP().toString() + "\n";
+    txt += "Gateway: " + WiFi.gatewayIP().toString();
+    setPreview(txt);
+  } else {
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("NOT CONNECTED");
+    y += 30;
+    
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("AP Mode Available:");
+    y += 14;
+    
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setCursor(4, y);
+    tft.print("SSID: ESP32-Radar");
+    y += 12;
+    tft.setCursor(4, y);
+    tft.print("IP: 192.168.4.1");
+    
+    setPreview("NETWORK INFO\nNOT CONNECTED\nAP: ESP32-Radar\nIP: 192.168.4.1");
+  }
+}
+
 void closeGIF() {
   if (gifFile) {
     gif.close();
@@ -957,13 +1176,15 @@ void updateMode() {
   c_mode = mode;
   xSemaphoreGive(configMutex);
   switch (c_mode) {
-    case 1: modeFlight();  break;
-    case 2: modeAirport(); break;
-    case 3: modeMap();     break;
-    case 4: modeWeather(); break;
-    case 5: modeClock();   break;
-    case 6: modeSystem();  break;
-    case 7: modeGIF();     break;
+    case 1: modeFlight();       break;
+    case 2: modeAirport();      break;
+    case 3: modeMap();          break;
+    case 4: modeWeather();      break;
+    case 5: modeClock();        break;
+    case 6: modeSystem();       break;
+    case 7: modeGIF();          break;
+    case 8: modeSettings();     break;
+    case 9: modeNetworkInfo();  break;
     default: Log.printf("updateMode: unknown mode %d\n", c_mode);
   }
   updating = false;

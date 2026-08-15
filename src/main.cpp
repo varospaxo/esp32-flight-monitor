@@ -98,6 +98,102 @@ void loop() {
     lastUpdate = millis();
   }
 
+  // 1b. Touch swipe handling — poll in a tight loop to capture end position before finger lifts
+  uint16_t tx, ty;
+  if (tft.getTouch(&tx, &ty)) {
+    TouchPoint touchStart = {tx, ty};
+    TouchPoint touchEnd   = {tx, ty};
+    unsigned long t0 = millis();
+
+    // Keep sampling until finger lifts or 600ms timeout
+    while (millis() - t0 < 600) {
+      delay(8);
+      if (!tft.getTouch(&tx, &ty)) break;
+      touchEnd.x = tx;
+      touchEnd.y = ty;
+    }
+
+    unsigned long dur = millis() - t0;
+    Log.printf("Touch: (%d,%d)->(%d,%d) %lums\n",
+               touchStart.x, touchStart.y, touchEnd.x, touchEnd.y, dur);
+
+    SwipeDirection swipe = detectSwipe(touchStart, touchEnd);
+
+    if (swipe == SWIPE_LEFT) {
+      int nextMode = getNextCycleMode(c_mode, c_cycleModes);
+      xSemaphoreTake(configMutex, portMAX_DELAY);
+      mode = nextMode; c_mode = nextMode; saveConfig();
+      xSemaphoreGive(configMutex);
+      lastModeCycle = millis();
+      Log.printf("Swipe left -> mode %d\n", c_mode);
+      updateMode(); lastUpdate = millis();
+
+    } else if (swipe == SWIPE_RIGHT) {
+      // Find previous mode in cycle list
+      int modeList[7]; int count = 0;
+      for (int m = 1; m <= 7; m++)
+        if (c_cycleModes.indexOf(String(m)) != -1) modeList[count++] = m;
+      int prevMode = count > 0 ? modeList[count - 1] : c_mode; // default: wrap to last
+      for (int i = 1; i < count; i++)
+        if (modeList[i] == c_mode) { prevMode = modeList[i - 1]; break; }
+      xSemaphoreTake(configMutex, portMAX_DELAY);
+      mode = prevMode; c_mode = prevMode; saveConfig();
+      xSemaphoreGive(configMutex);
+      lastModeCycle = millis();
+      Log.printf("Swipe right -> mode %d\n", c_mode);
+      updateMode(); lastUpdate = millis();
+
+    } else if (swipe == SWIPE_UP) {
+      xSemaphoreTake(configMutex, portMAX_DELAY);
+      mode = 8; c_mode = 8;
+      xSemaphoreGive(configMutex);
+      Log.println("Swipe up -> settings");
+      updateMode(); lastUpdate = millis();
+
+    } else if (swipe == SWIPE_DOWN) {
+      xSemaphoreTake(configMutex, portMAX_DELAY);
+      mode = 9; c_mode = 9;
+      xSemaphoreGive(configMutex);
+      Log.println("Swipe down -> network info");
+      updateMode(); lastUpdate = millis();
+
+    } else {
+      // Tap — handle settings button presses
+      if (c_mode == 8) {
+        int action = handleSettingsTouch(touchStart.x, touchStart.y);
+        if (action == 1) {
+          xSemaphoreTake(configMutex, portMAX_DELAY);
+          autoCycle = !autoCycle; saveConfig();
+          xSemaphoreGive(configMutex);
+          Log.printf("Auto-cycle -> %s\n", autoCycle ? "ON" : "OFF");
+          updateMode(); lastUpdate = millis();
+        } else if (action >= 100) {
+          int modeNum = action - 100;
+          xSemaphoreTake(configMutex, portMAX_DELAY);
+          if (cycleModes.indexOf(String(modeNum)) != -1) {
+            cycleModes.replace(String(modeNum) + ",", "");
+            cycleModes.replace("," + String(modeNum), "");
+            cycleModes.replace(String(modeNum), "");
+          } else {
+            String newCycles = "";
+            for (int m = 1; m <= 7; m++) {
+              if (m == modeNum || cycleModes.indexOf(String(m)) != -1) {
+                if (newCycles.length() > 0) newCycles += ",";
+                newCycles += String(m);
+              }
+            }
+            cycleModes = newCycles;
+          }
+          cycleModes = normalizeCycleModes(cycleModes);
+          saveConfig();
+          xSemaphoreGive(configMutex);
+          Log.printf("Mode %d toggled, cycles: %s\n", modeNum, cycleModes.c_str());
+          updateMode(); lastUpdate = millis();
+        }
+      }
+    }
+  }
+
   // 2. Auto-Cycle Modes feature
   if (c_autoCycle) {
     if (lastModeCycle == 0) lastModeCycle = millis();
@@ -117,7 +213,7 @@ void loop() {
   }
 
   // 3. Regular refresh for current mode
-  unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : 10000UL);
+  unsigned long interval = (c_mode == 5) ? 1000UL : ((c_mode == 6) ? 15000UL : ((c_mode == 8 || c_mode == 9) ? 30000UL : 10000UL));
   if (c_mode == 7) interval = gifDelayMs;
   if (millis() - lastUpdate > interval) {
     if (c_mode != 7) Log.printf("Loop: trigger refresh for mode %d\n", c_mode);
