@@ -128,9 +128,10 @@ void modeFlight() {
     Log.printf("ADSB.fi status: %d\n", code);
     if (code != 200) { drawText("FLIGHT ERR " + String(code)); http.end(); return; }
     adsbOk = true; lastSuccess = millis();
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream());
+    String payload = http.getString();
     http.end();
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload);
     if (err) { 
       Log.printf("FLIGHT PARSE ERR: %s\n", err.c_str());
       drawText("FLIGHT PARSE ERR"); return; 
@@ -181,8 +182,9 @@ void modeFlight() {
     http2.begin(client2, "https://api.adsbdb.com/v0/callsign/" + sorted[0].flight);
     http2.setUserAgent("Mozilla/5.0");
     if (http2.GET() == 200) {
+      String payload2 = http2.getString();
       JsonDocument db;
-      DeserializationError err = deserializeJson(db, http2.getStream());
+      DeserializationError err = deserializeJson(db, payload2);
       if (!err) {
         JsonObject fr = db["response"]["flightroute"];
         if (!fr.isNull()) {
@@ -448,10 +450,10 @@ void modeAirport() {
     int code = http.GET();
     Log.printf("ADSB.fi Airport status: %d\n", code);
     if (code != 200) { drawText("AIRPORT ERR " + String(code)); http.end(); return; }
-    adsbOk = true; lastSuccess = millis();
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream());
+    String payload = http.getString();
     http.end(); // Close connection early
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload);
     if (err) { drawText("PARSE ERR"); return; }
     JsonArray ac = doc["ac"].as<JsonArray>();
     int total = ac.size();
@@ -563,9 +565,10 @@ void modeMap() {
   String bestInfFlight = ""; int bestInfRate = 0; float bestInfLat = 0, bestInfLon = 0;
   String txt = "RADAR MAP\n";
   {
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream());
+    String payload = http.getString();
     http.end(); // Close connection
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, payload);
     if (err) { 
       Log.printf("MAP PARSE ERR: %s\n", err.c_str());
       drawText("MAP PARSE ERR"); return; 

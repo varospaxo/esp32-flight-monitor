@@ -70,8 +70,9 @@ bool fetchAirportInference(String flight, int baro_rate, float acLat, float acLo
   Log.printf("ADS-B DB Status: %d\n", code);
   bool success = false;
   if (code == 200) {
+    String payload = http.getString();
     JsonDocument db;
-    DeserializationError err = deserializeJson(db, http.getStream());
+    DeserializationError err = deserializeJson(db, payload);
     if (!err) {
       JsonObject fr = db["response"]["flightroute"];
       if (!fr.isNull()) {
